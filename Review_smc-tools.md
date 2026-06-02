@@ -23,7 +23,9 @@ the changelog.
 | 5 | debian/copyright | warn |
 | 6 | Patches (quilt)/DEP-3 | pass |
 | 7 | Symbols & ABI | n/a |
-| 8 | Lintian | warn (0 E, 2 W) |
+| 8 | Lintian (source package) | warn (0 E, 2 W) |
+| 9 | Binary builds (PPA) | pass (5/5 arches) |
+| 10 | Lintian (binary packages) | warn (0 E) |
 
 ## Must fix (blocking)
 
@@ -89,8 +91,19 @@ the changelog.
   licenses detected (`licensecheck`).
 - **Symbols/ABI:** n/a — `libsmc-preload.so` is an `LD_PRELOAD` shim with no
   SONAME/public ABI, so no symbols file is required.
-- **Lintian:** `-EvIL +pedantic` → **0 errors**, 2 warnings (both covered
-  above), 2 info, 1 pedantic, 2 experimental.
+- **Lintian (source package):** `-EvIL +pedantic` → **0 errors**, 2 warnings
+  (both covered above), 2 info, 1 pedantic, 2 experimental.
+- **Binary builds (PPA):** **all 5 architectures built successfully** —
+  amd64, arm64, armhf, ppc64el, s390x. No failed builds; no build log to chase.
+- **Lintian (binary packages):** `lintian -EvIL +pedantic *.deb` on
+  `smc-tools_1.8.7-0ubuntu1_amd64.deb` → **0 errors**. Real findings:
+  `no-manual-page [usr/bin/smc_dbg]` (W), `hardening-no-bindnow` on the preload
+  lib (I), and a `renamed-tag` in the package's own `lintian-overrides` (P,
+  should update `ldconfig-symlink-missing-for-shlib` →
+  `lacks-versioned-link-to-shared-library`).
+  - The 24 `groff-message … troff: Segmentation fault (core dumped)` warnings
+    are **artifacts of a broken groff/troff in this review container**, not
+    package defects — they should be re-checked on a normal builder.
 
 ## Commands used
 
@@ -102,8 +115,10 @@ wrap-and-sort -n -a                                # control tidiness (clean)
 licensecheck -r .                                  # copyright cross-check
 QUILT_PATCHES=debian/patches quilt push -a         # patch apply (clean)
 lintian -EvIL +pedantic smc-tools_1.8.7-0ubuntu1.dsc
+./check-binaries.sh                                # build status + download debs
+lintian -EvIL +pedantic *.deb                      # binary lintian
 ```
 
-> No signed build and no upload were performed (read-only review). No full
-> binary build (`sbuild` unavailable); checks are source-level plus lintian on
-> the `.dsc`.
+> No signed build and no upload were performed (read-only review). No local
+> binary build (`sbuild` unavailable); instead the PPA's own binary builds were
+> checked via Launchpad and the published `.deb`s were lint-checked.

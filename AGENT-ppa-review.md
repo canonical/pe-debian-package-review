@@ -94,10 +94,33 @@ run without a full binary build:
   applies with no fuzz; `quilt pop -a`; `series` consistent; `3.0 (quilt)` not
   editing upstream directly.
 - **Symbols/ABI**: libraries ship up-to-date symbols; SONAMEs consistent.
-- **Lintian**: `lintian -EviL -pedantic <package>_<version>.dsc` on the source
-  (and on `*.deb` if binaries are available); zero E, ideally zero W.
+- **Lintian (source package)**: `lintian -EvIL +pedantic <package>_<version>.dsc`
+  on the source; zero E, ideally zero W.
+
+## Step 3b — Binary builds & binary lintian
+
+Check the PPA's own binary builds and lint the resulting `.deb`s:
+
+```sh
+./check-binaries.sh                 # uses the pick in .ppa-request
+./check-binaries.sh OWNER/ARCHIVE PKG SERIES
+```
+
+- **Binary builds (PPA)**: `python3 ppa.py builds ppa:OWNER/ARCHIVE PKG SERIES`
+  prints the per-architecture state from Launchpad. If any arch is not
+  "Successfully built", report it and **reference the build-log URL** that the
+  command prints (the helper exits non-zero so the step is flagged). The helper
+  also downloads the published binaries (`pull-ppa-source -p debs`) into
+  `/tmp/opencode/ppa-review`.
+- **Lintian (binary packages)**: run explicitly on every downloaded `.deb`:
+  ```sh
+  cd /tmp/opencode/ppa-review && lintian -EvIL +pedantic *.deb
+  ```
+  Note: binary lintian catches issues source lintian can't (man pages,
+  hardening, shlib symlinks, stale overrides). Ignore environment-induced noise
+  (e.g. a broken groff/troff producing `groff-message … Segmentation fault`).
 - Optional **source build**: `dpkg-buildpackage -S -us -uc` (no `sbuild` here, so
-  no full binary build).
+  no local binary build — rely on the PPA's builds above).
 
 ## Step 4 — Report
 

@@ -46,7 +46,9 @@ DEFAULT_STEPS = [
     "debian/copyright",
     "Patches (quilt) / DEP-3",
     "Symbols & ABI",
-    "Lintian",
+    "Lintian (source package)",
+    "Binary builds (PPA)",
+    "Lintian (binary packages)",
     "Report",
 ]
 
