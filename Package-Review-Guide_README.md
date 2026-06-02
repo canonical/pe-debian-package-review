@@ -1,4 +1,6 @@
-# What a DEB Package Review (Ubuntu) Needs
+# PE Package Review Guide
+
+## What a DEB Package Review (Ubuntu) Needs
 
 A consolidated, explained checklist for reviewing and sponsoring Ubuntu/Debian
 source packages. It merges and restructures two sources — the PE team review
