@@ -121,10 +121,29 @@ explicit, recorded justification for any exception.
 
 ## 6. Patches (quilt) and DEP-3
 
-- **Every patch needs a DEP-3 header** (Description, Origin/Author, Bug if any,
-  Last-Update) so its purpose and provenance are documented.
+For the full authoring walkthrough see
+<https://documentation.ubuntu.com/project/contributors/patching/make-changes-to-a-package/>.
+
+- **Understand the separation of concerns** — in a `3.0 (quilt)` package, Git
+  tracks only the *packaging* (`debian/`), while changes to upstream source are
+  carried as quilt patches under `debian/patches/`. A correct commit adds a new
+  `debian/patches/<name>.patch` file (and the `series` entry), **never** a diff
+  that edits upstream files directly.
 - **The source format must be correct** (`debian/source/format`, typically
   `3.0 (quilt)`).
+- **Patches should be created the `quilt` way** so they are well-formed:
+  - `QUILT_PATCHES=debian/patches quilt new <name>.patch` — register a new patch
+    and add it to `series`.
+  - `quilt add <file>` **before** editing each source file, so quilt records it.
+  - `quilt refresh -p ab --no-timestamps --no-index` — produce clean, stable,
+    review-friendly diffs (no machine-specific timestamps/index lines).
+- **Every patch needs a DEP-3 header** (Description, Origin/Author, Forwarded,
+  Bug if any, Last-Update) so its purpose and provenance are documented; add it
+  with `quilt header -e --dep3`. For Ubuntu-only patches, record
+  `Forwarded: no, Ubuntu only`.
+- **Each patch should be its own Git commit**, committing just
+  `debian/patches/` (the patch file plus the updated `series`) with a clear
+  message.
 - **All patches must apply cleanly** — `quilt push -a` then `quilt pop -a`,
   leaving the tree clean before building.
 - **Patches must not report fuzz** — fuzz breaks builds; refresh the patch with
@@ -135,6 +154,10 @@ explicit, recorded justification for any exception.
   **and** the `series` file.
 - **Never edit upstream files directly** in `3.0 (quilt)` packages — all changes
   go through quilt; clean `.pc/` between operations.
+- **Reviewer tooling note**: the source is typically obtained with
+  `git-ubuntu clone <package>`, and the matching orig tarball with
+  `git-ubuntu export-orig` (which lands `../<pkg>_<ver>.orig.tar.gz` one
+  directory up, where the build tools expect it — leave it there).
 
 ## 7. Symbols & ABI
 
