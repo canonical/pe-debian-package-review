@@ -244,7 +244,7 @@ def render_html():
         "<div class='panel'><h2>Review status</h2>"
         f"<p>{head} &mdash; {done}/{len(steps)} steps</p>"
         f"{cur_line}"
-        + (f"<p><b>&#128196; <a href='{report}'>Open the full review report</a></b></p>"
+        + (f"<p><b>&#128196; <a href='{report}'>See {pkg} report</a></b></p>"
            if report else "")
         + f"<ul class='steps'>{''.join(rows)}</ul>"
         + (f"<p class='muted'>{_html_escape(note)}</p>" if note else "")
