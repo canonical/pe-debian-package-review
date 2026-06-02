@@ -39,9 +39,10 @@ If there are several packages, confirm with the user which one(s) to review
 
 ## Scriptable steps in one shot (optional)
 
-Picking a package on the web page only records `.ppa-request`; it does not run
-anything. To execute the **mechanical** steps in order — streamed live to the
-status panel — run:
+Picking a package on the web page now **auto-starts** the mechanical steps: the
+server launches `review-run.sh` in the background (detached, guarded so only one
+review runs at a time) and the status panel begins updating on its own. You can
+also run it by hand — to re-run, or when driving a review without the web UI:
 
 ```sh
 ./review-run.sh                          # uses the pick in .ppa-request

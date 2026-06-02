@@ -16,6 +16,7 @@ Routes:
 import atexit
 import http.server
 import os
+import subprocess
 import sys
 import threading
 import urllib.parse
@@ -36,6 +37,8 @@ PPA_PATH = "/debpr/ppa"
 STATUS_PATH = "/debpr/ppa/status"
 REQUEST_FILE = DIR / ".ppa-request"
 PIDFILE = DIR / ".serve.pid"
+RUNNER = DIR / "review-run.sh"
+RUN_LOG = "/tmp/debpr-review-run.log"
 MANY = 5  # warn when a PPA has more than this many packages
 
 STYLE = ("body{max-width:900px;margin:auto;padding:2rem;"
@@ -153,6 +156,33 @@ def record(owner, archive, package="", series=""):
         f"\t{package}\t{series}\n", encoding="utf-8")
 
 
+_run_lock = threading.Lock()
+_run_proc = None  # the in-flight review-run.sh, if any
+
+
+def start_review_run(setup=None):
+    """Run `setup` and launch review-run.sh detached, unless one is running.
+
+    `setup` (record the pick + init the status) runs *inside* the lock and only
+    when we actually start, so a fresh pick can't reset the state of a review
+    that's already in flight. Returns True if started, False if one was running.
+    The child gets its own session (start_new_session) so it survives the
+    request thread, with stdin closed and output captured to RUN_LOG.
+    """
+    global _run_proc
+    with _run_lock:
+        if _run_proc is not None and _run_proc.poll() is None:
+            return False
+        if setup:
+            setup()
+        log = open(RUN_LOG, "w", encoding="utf-8")
+        _run_proc = subprocess.Popen(
+            ["bash", str(RUNNER)], cwd=str(DIR),
+            stdout=log, stderr=subprocess.STDOUT,
+            stdin=subprocess.DEVNULL, start_new_session=True)
+        return True
+
+
 class Handler(http.server.BaseHTTPRequestHandler):
     def _send(self, payload, code=200, ctype="text/html; charset=utf-8"):
         self.send_response(code)
@@ -181,14 +211,21 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 archive = q.get("archive", [""])[0]
                 pkg = q.get("pick", [""])[0]
                 series = q.get("series", [""])[0]
-                record(owner, archive, pkg, series)
-                review_status.init(f"ppa:{owner}/{archive}", pkg)
-                review_status.set_step("List packages", "done")
-                self._send(ppa_form(
-                    f"<p class='ok'>Recorded <code>{pkg}</code> "
-                    f"({series}) from <code>ppa:{owner}/{archive}</code> for "
-                    f"review. The agent will pick it up from "
-                    f"<code>.ppa-request</code>.</p>"))
+                def setup():
+                    record(owner, archive, pkg, series)
+                    review_status.init(f"ppa:{owner}/{archive}", pkg)
+                    review_status.set_step("List packages", "done")
+
+                if start_review_run(setup):
+                    msg = (f"<p class='ok'>Recorded <code>{pkg}</code> "
+                           f"({series}) from <code>ppa:{owner}/{archive}</code> "
+                           f"and <b>started the review</b>. The mechanical steps "
+                           f"are running now &mdash; watch the panel below; the "
+                           f"agent completes the judgment steps.</p>")
+                else:
+                    msg = ("<p class='warn'>A review is already running. Let it "
+                           "finish, then pick again to start a new one.</p>")
+                self._send(ppa_form(msg))
             else:
                 self._send(ppa_form())
         else:
