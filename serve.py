@@ -11,6 +11,7 @@ Routes:
                            user can pick one (warns if there are many)
   GET  /debpr/ppa?owner=&archive=&pick=NAME&series=S
                            record the chosen package to .ppa-request
+  GET  /debpr/ppa/status   the review-status panel as an HTML fragment (polled)
 """
 import http.server
 import socketserver
@@ -23,6 +24,7 @@ from pathlib import Path
 import markdown
 
 import ppa as ppalib
+import review_status
 
 PORT = 8000
 ADDRS = ["10.72.172.152", "127.0.0.1"]
@@ -30,6 +32,7 @@ DIR = Path(__file__).resolve().parent
 DOC = (DIR / (sys.argv[1] if len(sys.argv) > 1 else "Package-Review-Guide_README.md")).resolve()
 URL_PATH = "/debpr/" + DOC.name
 PPA_PATH = "/debpr/ppa"
+STATUS_PATH = "/debpr/ppa/status"
 REQUEST_FILE = DIR / ".ppa-request"
 MANY = 5  # warn when a PPA has more than this many packages
 
@@ -42,7 +45,10 @@ STYLE = ("body{max-width:900px;margin:auto;padding:2rem;"
          "table{border-collapse:collapse;width:100%}"
          "th,td{border:1px solid #d0d7de;padding:6px 10px;text-align:left}"
          ".warn{background:#fff8c5;border:1px solid #d4a72c;padding:.8em 1em;border-radius:6px}"
-         ".ok{color:#070}.err{color:#b00}")
+         ".ok{color:#070}.err{color:#b00}.muted{color:#57606a;font-size:.9em}"
+         ".panel{margin-top:2.5rem;border-top:2px solid #d0d7de;padding-top:1rem}"
+         ".steps{list-style:none;padding-left:0}"
+         ".steps li{padding:.15em 0}")
 
 
 def esc(s):
@@ -52,6 +58,15 @@ def esc(s):
 def html(title, body):
     return (f"<!doctype html><meta charset='utf-8'><title>{title}</title>"
             f"<style>{STYLE}</style>{body}").encode("utf-8")
+
+
+def status_panel():
+    """A self-refreshing container that polls the status fragment route."""
+    return (f"<div id='review-status'>{review_status.render_html()}</div>"
+            "<script>setInterval(function(){"
+            f"fetch('{STATUS_PATH}').then(function(r){{return r.text();}})"
+            ".then(function(t){document.getElementById('review-status')"
+            ".innerHTML=t;});},5000);</script>")
 
 
 def ppa_form(msg=""):
@@ -65,7 +80,8 @@ def ppa_form(msg=""):
         <button type="submit">List packages</button>
       </form>
       {msg}
-      <p><a href="{URL_PATH}">&larr; Review guide</a></p>""")
+      <p><a href="{URL_PATH}">&larr; Review guide</a></p>
+      {status_panel()}""")
 
 
 def package_list_page(owner, archive, rows):
@@ -87,7 +103,8 @@ def package_list_page(owner, archive, rows):
       {warn}
       <table><tr><th>Package</th><th>Version</th><th>Series</th><th></th></tr>
       {trs}</table>
-      <p><a href="{PPA_PATH}">&larr; Submit a different PPA</a></p>""")
+      <p><a href="{PPA_PATH}">&larr; Submit a different PPA</a></p>
+      {status_panel()}""")
 
 
 def record(owner, archive, package="", series=""):
@@ -112,6 +129,8 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 extensions=["fenced_code", "tables", "toc", "sane_lists"],
             )
             self._send(html(DOC.stem, body))
+        elif parts.path == STATUS_PATH:
+            self._send(review_status.render_html().encode("utf-8"))
         elif parts.path == PPA_PATH:
             q = urllib.parse.parse_qs(parts.query)
             if "pick" in q:  # user chose a specific package
@@ -120,6 +139,8 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 pkg = q.get("pick", [""])[0]
                 series = q.get("series", [""])[0]
                 record(owner, archive, pkg, series)
+                review_status.init(f"ppa:{owner}/{archive}", pkg)
+                review_status.set_step("List packages", "done")
                 self._send(ppa_form(
                     f"<p class='ok'>Recorded <code>{pkg}</code> "
                     f"({series}) from <code>ppa:{owner}/{archive}</code> for "
