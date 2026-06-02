@@ -91,19 +91,67 @@ the changelog.
   licenses detected (`licensecheck`).
 - **Symbols/ABI:** n/a — `libsmc-preload.so` is an `LD_PRELOAD` shim with no
   SONAME/public ABI, so no symbols file is required.
-- **Lintian (source package):** `-EvIL +pedantic` → **0 errors**, 2 warnings
-  (both covered above), 2 info, 1 pedantic, 2 experimental.
 - **Binary builds (PPA):** **all 5 architectures built successfully** —
   amd64, arm64, armhf, ppc64el, s390x. No failed builds; no build log to chase.
-- **Lintian (binary packages):** `lintian -EvIL +pedantic *.deb` on
-  `smc-tools_1.8.7-0ubuntu1_amd64.deb` → **0 errors**. Real findings:
-  `no-manual-page [usr/bin/smc_dbg]` (W), `hardening-no-bindnow` on the preload
-  lib (I), and a `renamed-tag` in the package's own `lintian-overrides` (P,
-  should update `ldconfig-symlink-missing-for-shlib` →
-  `lacks-versioned-link-to-shared-library`).
-  - The 24 `groff-message … troff: Segmentation fault (core dumped)` warnings
-    are **artifacts of a broken groff/troff in this review container**, not
-    package defects — they should be re-checked on a normal builder.
+
+## Lintian — full results
+
+Two runs: `lintian -EvIL +pedantic` on the source `.dsc`, and the same on the
+published binary `.deb`. Severities map to the review as: **E (error) = must
+fix**, **W (warning) = should fix**; I/P/X are informational.
+
+### Lintian errors (must fix)
+
+**None.** Both the source package and the binary package produced **0 errors**.
+
+### Lintian warnings (should fix)
+
+Source package (`smc-tools_1.8.7-0ubuntu1.dsc`) — 2 warnings:
+
+| Tag | Location | Meaning / action |
+|-----|----------|------------------|
+| `missing-debian-watch-file-standard` | `debian/watch` | The watch file doesn't start with a `version=` line, so lintian can't read its standard — corroborates the broken watch (Must-fix #1). Fix `debian/watch` to a real `version=5` file. |
+| `newer-standards-version 4.7.2 (current is 4.6.2)` | `debian/control` | **False positive here** — the package's `Standards-Version: 4.7.2` is *newer* than this (older) lintian's database knows about. No action; nothing to downgrade. |
+
+Binary package (`smc-tools_1.8.7-0ubuntu1_amd64.deb`) — 1 real warning
+(+ 24 environment-noise warnings, see below):
+
+| Tag | Location | Meaning / action |
+|-----|----------|------------------|
+| `no-manual-page` | `usr/bin/smc_dbg` | The `smc_dbg` binary installed in `/usr/bin` ships no man page. Every program in `/usr/bin` should have one (a symlink to a shared page is acceptable). Add a man page or a symlink. |
+
+Environment-noise warnings (NOT package defects — do not action):
+
+- 24 × `groff-message` of two kinds — 11 × `command exited with status 2` and
+  13 × `troff: Segmentation fault (core dumped)` — across
+  `af_smc.7`, `smc_pnet.8`, `smc_run.8`, `smcd-device.8`, `smcd-info.8`,
+  `smcd-linkgroup.8`, `smcd-seid.8`, `smcd-stats.8`, `smcd-ueid.8`, `smcd.8`,
+  `smcr.8`, `smcss.8`. These come from a **broken groff/troff in this review
+  container** (troff is literally segfaulting), not from the man pages
+  themselves. Re-check on a normal builder before trusting them.
+
+### Lintian info / pedantic (nice to have)
+
+| Tag | Where | Note |
+|-----|-------|------|
+| `hardening-no-bindnow` (I) | binary `usr/lib/libsmc-preload.so` | Build with now-binding hardening flags. |
+| `patch-not-forwarded-upstream` (I, ×2) | `fix_folder_31_32_bit_systems.patch`, `fix_typo_in_manual_page.patch` | See Should-fix #5. |
+| `renamed-tag` (P) | binary `usr/share/lintian/overrides/smc-tools:4` | Update the override `ldconfig-symlink-missing-for-shlib` → `lacks-versioned-link-to-shared-library`. |
+| `silent-on-rules-requiring-root` (P) | `debian/control` | Set `Rules-Requires-Root: no`. |
+| `update-debian-copyright 2018 vs 2026` (X) | `debian/copyright:232` | See Should-fix #3. |
+| `upstream-metadata-file-is-missing` (X) | source | Add `debian/upstream/metadata`. |
+
+## What else passed
+
+- **Classification:** new-upstream-version update to the devel release
+  (resolute); not an SRU. Archive has 1.8.3 (noble) / 1.8.5 (questing); 1.8.7
+  is already in resolute/stonking.
+- **Patches:** all 3 apply cleanly via `quilt push -a` (no fuzz/offset) and
+  carry complete DEP-3 headers.
+- **control:** `wrap-and-sort -n` clean; `debhelper-compat (= 13)`;
+  `Standards-Version: 4.7.2` (current); source format `3.0 (quilt)`.
+- **copyright:** valid DEP-5; EPL-1.0 with full license text; no conflicting
+  licenses detected (`licensecheck`).
 
 ## Commands used
 
