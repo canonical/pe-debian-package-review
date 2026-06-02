@@ -72,3 +72,9 @@ echo
 echo "Scriptable steps done. Remaining judgment steps are for the agent:"
 echo "  Classify, debian/watch, changelog, control, copyright, patches,"
 echo "  Symbols & ABI, Report."
+
+# Make the parked state explicit in the panel so it doesn't look hung: the
+# mechanical phase is finished and the remaining steps await the agent.
+"${RS[@]}" note "Mechanical checks complete (fetch, source/binary lintian, \
+builds). Awaiting agent review of: Classify, debian/watch, changelog, control, \
+copyright, patches, Symbols & ABI, then Report."
