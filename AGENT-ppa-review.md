@@ -37,6 +37,25 @@ python3 ppa.py ppa:OWNER/ARCHIVE
 If there are several packages, confirm with the user which one(s) to review
 (reviewing all can be large). Record the chosen targets.
 
+## Scriptable steps in one shot (optional)
+
+Picking a package on the web page only records `.ppa-request`; it does not run
+anything. To execute the **mechanical** steps in order — streamed live to the
+status panel — run:
+
+```sh
+./review-run.sh                          # uses the pick in .ppa-request
+./review-run.sh OWNER/ARCHIVE PKG SERIES # or specify explicitly
+```
+
+It runs: Fetch source -> Lintian (source package) -> Binary builds (PPA) ->
+Lintian (binary packages), stopping if the fetch fails. lintian uses
+`--fail-on none`, so a finding (E:/W:) doesn't fail the step — every tag lands in
+the panel log for you to triage. The **judgment** steps below (Classify,
+debian/watch, changelog, control, copyright, patches, Symbols & ABI, Report)
+are still done by the agent. The individual steps can also be run on their own,
+as described next.
+
 ## Step 2 — Fetch the source
 
 For each chosen package, pull the source for its series (no signing, no upload).
