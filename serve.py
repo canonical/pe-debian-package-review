@@ -13,8 +13,9 @@ Routes:
                            record the chosen package to .ppa-request
   GET  /debpr/ppa/status   the review-status panel as an HTML fragment (polled)
 """
+import atexit
 import http.server
-import socketserver
+import os
 import sys
 import threading
 import urllib.parse
@@ -34,6 +35,7 @@ URL_PATH = "/debpr/" + DOC.name
 PPA_PATH = "/debpr/ppa"
 STATUS_PATH = "/debpr/ppa/status"
 REQUEST_FILE = DIR / ".ppa-request"
+PIDFILE = DIR / ".serve.pid"
 MANY = 5  # warn when a PPA has more than this many packages
 
 STYLE = ("body{max-width:900px;margin:auto;padding:2rem;"
@@ -63,12 +65,35 @@ def html(title, body):
             f"<style>{STYLE}</style>{body}").encode("utf-8")
 
 
+_md_cache = {}  # str(path) -> (mtime, payload); markdown render is the slow bit
+
+
 def render_markdown(path):
+    key = str(path)
+    mtime = path.stat().st_mtime
+    hit = _md_cache.get(key)
+    if hit and hit[0] == mtime:
+        return hit[1]
     body = markdown.markdown(
         path.read_text(encoding="utf-8"),
         extensions=["fenced_code", "tables", "toc", "sane_lists"],
     )
-    return html(path.stem, body)
+    payload = html(path.stem, body)
+    _md_cache[key] = (mtime, payload)
+    return payload
+
+
+_status_cache = {"sig": None, "payload": b""}
+
+
+def status_fragment():
+    """Render the status panel, cached on the state+log file mtimes."""
+    sig = tuple(p.stat().st_mtime if p.is_file() else 0
+                for p in (review_status.STATE_FILE, review_status.LOG_FILE))
+    if _status_cache["sig"] != sig:
+        _status_cache["sig"] = sig
+        _status_cache["payload"] = review_status.render_html().encode("utf-8")
+    return _status_cache["payload"]
 
 
 def status_panel():
@@ -140,7 +165,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
         if parts.path == URL_PATH:
             self._send(render_markdown(DOC))
         elif parts.path == STATUS_PATH:
-            self._send(review_status.render_html().encode("utf-8"))
+            self._send(status_fragment())
         elif parts.path.startswith("/debpr/") and parts.path.endswith(".md"):
             # Serve any Markdown file living in the repo dir (e.g. review-*.md).
             name = parts.path[len("/debpr/"):]
@@ -200,15 +225,20 @@ class Handler(http.server.BaseHTTPRequestHandler):
 
 
 def serve(addr):
-    socketserver.TCPServer.allow_reuse_address = True
-    with socketserver.TCPServer((addr, PORT), Handler) as httpd:
-        print(f"Serving http://{addr}:{PORT}{URL_PATH}  (PPA form: {PPA_PATH})")
-        httpd.serve_forever()
+    httpd = http.server.ThreadingHTTPServer((addr, PORT), Handler)
+    print(f"Serving http://{addr}:{PORT}{URL_PATH}  (PPA form: {PPA_PATH})")
+    httpd.serve_forever()
+
+
+def _write_pidfile():
+    PIDFILE.write_text(f"{os.getpid()}\n", encoding="utf-8")
+    atexit.register(lambda: PIDFILE.unlink(missing_ok=True))
 
 
 if __name__ == "__main__":
     if not DOC.is_file():
         sys.exit(f"file not found: {DOC}")
+    _write_pidfile()
     for addr in ADDRS[1:]:
         threading.Thread(target=serve, args=(addr,), daemon=True).start()
     serve(ADDRS[0])

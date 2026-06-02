@@ -22,10 +22,13 @@ start() {
   if is_running; then echo "already running (pid $(cat "$PIDFILE"))"; return; fi
   local f; f="$(current_file)"
   [ -f "$DIR/$f" ] || { echo "file not found: $f"; exit 1; }
+  rm -f "$PIDFILE"
+  # serve.py writes its own PID to $PIDFILE on startup, so we never have to guess
+  # which process is the server (pgrep would also match this launcher).
   setsid bash -c "exec python3 '$DIR/serve.py' '$f' >'$LOG' 2>&1 </dev/null" &
-  sleep 1
-  pgrep -f "[s]erve.py" | head -1 > "$PIDFILE"
-  is_running && echo "started (pid $(cat "$PIDFILE")) serving $f" || { echo "failed to start; see $LOG"; exit 1; }
+  for _ in $(seq 1 25); do is_running && break; sleep 0.2; done
+  is_running && echo "started (pid $(cat "$PIDFILE")) serving $f" \
+    || { echo "failed to start; see $LOG"; exit 1; }
 }
 
 stop() {
