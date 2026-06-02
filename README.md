@@ -41,7 +41,39 @@ explicit, recorded justification for any exception.
 - **Entries must be clear, crisp, and grep-able** — use keywords, file names,
   and patch names so the history is easy to search later.
 - **The package version must be correct** and follow Ubuntu version-string
-  rules (e.g. `-0ubuntuN` for Ubuntu-only packages, `~` for pre-releases).
+  rules (e.g. `-0ubuntuN` for Ubuntu-only packages, `~` for pre-releases). The
+  canonical reference is
+  <https://documentation.ubuntu.com/project/how-ubuntu-is-made/concepts/version-strings/>.
+  Key cases to check during review:
+  - **Anatomy**: an Ubuntu version reads
+    `[upstream_version]-[debian_revision]ubuntu[ubuntu_revision]`. The `-` splits
+    upstream from the Debian revision; the `ubuntu` marker separates Ubuntu's
+    changes so upstream, Debian, and Ubuntu can each iterate without colliding.
+  - **Change in the devel release**: append/increment the number after `ubuntu`
+    — `2.0-2` → `2.0-2ubuntu1` → `2.0-2ubuntu2`.
+  - **Brand-new, Ubuntu-only package**: there is no Debian revision yet, so use
+    `-0ubuntu1` (e.g. upstream `0.24.1` → `0.24.1-0ubuntu1`); the `ubuntu` suffix
+    is mandatory to prevent auto-sync from overwriting it.
+  - **Sync / re-sync from Debian**: keep the **exact** Debian version (no
+    `ubuntu` suffix) — adding one would block future auto-syncs.
+  - **No-change rebuild** (e.g. a library transition): add/increment a `buildN`
+    suffix, not `ubuntuN` — `2.0-3` → `2.0-3build1` — so the package stays
+    sync-eligible.
+  - **Stable Release Update (SRU)**: never reuse or go backwards from the
+    published version. If there was no prior Ubuntu delta, start at `ubuntu0.1`
+    (`2.0-2` → `2.0-2ubuntu0.1`); if a delta exists, extend its trailing
+    component (`2.0-2ubuntu2.4` → `2.0-2ubuntu2.5`).
+  - **Native packages** (Debian/Ubuntu is upstream — no `-debian_revision`): the
+    native marker suffix is plain `ubuntu` (migrate legacy `ubuntu0`); a Debian
+    native `2.0` getting an Ubuntu delta becomes `2.0ubuntu1`.
+  - **Backports across releases**: use a `~` suffix so the version sorts
+    *before* the target release's own (e.g. `3.1-0ubuntu0.22.10.1` or
+    `…~22.10.1`); `~` always orders lower than no suffix.
+  - **PPA / test builds**: use a `~ppaN` suffix (e.g.
+    `0.24.1-0ubuntu1~ppa1`) so the test build sorts below the eventual archive
+    upload and never blocks it.
+  - **Verify ordering** with `dpkg --compare-versions A lt B && echo ok` before
+    settling on a version.
 - **The target release must be correct** and consistent with §1.
 - **A valid signature line must close the block** with the right name and email.
 - **A Launchpad bug should be referenced** in the form `LP: #1234567` or
