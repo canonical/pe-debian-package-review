@@ -29,6 +29,9 @@ explicit, recorded justification for any exception.
 
 - **A correct watch file must be present** — it lets tooling discover and verify
   new upstream releases; a reviewer should always insist on one.
+- **Use the latest watch file format** — `version=5` as of today. New packages
+  in particular should ship a `version=5` watch file rather than an older
+  format.
 - **Validate it actually works**: `uscan --watchfile debian/watch --verbose`.
 - **Use `uversionmangle`/`dversionmangle` where needed** to normalize odd
   upstream version strings into a sane Debian version.
@@ -62,7 +65,8 @@ explicit, recorded justification for any exception.
   redundantly repeat fields already inherited from the source stanza.
 - **Standards-Version should be current** — bump it (and make the matching
   policy changes) when targeting the Ubuntu devel series or Debian
-  unstable/experimental.
+  unstable/experimental. **New packages especially must use the latest available
+  Standards-Version** rather than an older one.
 - **Fields must be sane** — accurate Sections, meaningful Descriptions, correct
   dependencies, and upstream metadata (`debian/upstream/metadata`).
 - **Decide whether `update-maintainer` is needed** so Ubuntu uploads carry
@@ -149,6 +153,9 @@ explicit, recorded justification for any exception.
 ## 11. New packages (needs-packaging) — extra care
 
 - **File a `needs-packaging` LP bug** using the official New Packages template.
+- **Use the latest standards/formats** — ship a `version=5` watch file (§2) and
+  set `Standards-Version` to the latest available release (§4); new packages
+  have no legacy excuse for trailing versions.
 - **Give copyright the strictest review** (see §5) — it gates archive entry.
 - **Follow the target-release rule**: land in the current devel release first,
   then add to in-service releases newest→oldest. If a partner has only specific
