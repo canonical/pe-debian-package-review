@@ -40,8 +40,9 @@ STYLE = ("body{max-width:900px;margin:auto;padding:2rem;"
          "font-family:sans-serif;line-height:1.6}"
          "pre{background:#f6f8fa;padding:1rem;overflow:auto}"
          "code{background:#eff1f3;padding:.1em .3em}"
-         "input[type=text]{width:100%;padding:.6em;font-size:1em;box-sizing:border-box}"
-         "button{margin-top:1em;padding:.6em 1.2em;font-size:1em}"
+         "input[type=text]{flex:1;padding:.6em;font-size:1em;box-sizing:border-box}"
+         "button{padding:.6em 1.2em;font-size:1em;white-space:nowrap}"
+         ".ppa-row{display:flex;gap:.6em;align-items:stretch}"
          "table{border-collapse:collapse;width:100%}"
          "th,td{border:1px solid #d0d7de;padding:6px 10px;text-align:left}"
          ".warn{background:#fff8c5;border:1px solid #d4a72c;padding:.8em 1em;border-radius:6px}"
@@ -79,8 +80,10 @@ def ppa_form(msg=""):
       (<code>https://launchpad.net/~owner/+archive/ubuntu/name</code>)
       or as an add-apt-repository spec (<code>ppa:owner/name</code>).</p>
       <form method="post" action="{PPA_PATH}">
-        <input type="text" name="ppa" placeholder="ppa:fheimes/test" required>
-        <button type="submit">List packages</button>
+        <div class="ppa-row">
+          <input type="text" name="ppa" placeholder="ppa:fheimes/test" required>
+          <button type="submit">List packages</button>
+        </div>
       </form>
       {msg}
       <p><a href="{URL_PATH}">&larr; Review guide</a></p>
