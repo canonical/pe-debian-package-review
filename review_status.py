@@ -12,6 +12,7 @@ CLI:
   python3 review_status.py init <ppa> <package>     start/reset a review
   python3 review_status.py step <name> <status>     set one step's status
   python3 review_status.py note <text>              set the free-text note
+  python3 review_status.py report <url>             link the finished report
   python3 review_status.py log <text...>            append one activity line
   python3 review_status.py run <name> <cmd...>      mark step active, stream the
                                                     command's output to the log,
@@ -134,6 +135,15 @@ def set_note(text):
     log(text)
 
 
+def set_report(url):
+    state = load()
+    if state is None:
+        sys.exit("no review in progress; run `init` first")
+    state["report"] = url
+    save(state)
+    log(f"Report available: {url}")
+
+
 def run(name, cmd):
     """Mark a step active, stream the command output to the log, set result."""
     set_step(name, "active")
@@ -213,6 +223,7 @@ def render_html():
     ppa = state.get("ppa") or "?"
     note = state.get("note", "")
     updated = state.get("updated", "")
+    report = state.get("report", "")
     head = (f"Reviewing <code>{pkg}</code> from <code>{ppa}</code>"
             if pkg != "?" else "Review")
     if cur and cur["status"] == "active":
@@ -233,7 +244,9 @@ def render_html():
         "<div class='panel'><h2>Review status</h2>"
         f"<p>{head} &mdash; {done}/{len(steps)} steps</p>"
         f"{cur_line}"
-        f"<ul class='steps'>{''.join(rows)}</ul>"
+        + (f"<p><b>&#128196; <a href='{report}'>Open the full review report</a></b></p>"
+           if report else "")
+        + f"<ul class='steps'>{''.join(rows)}</ul>"
         + (f"<p class='muted'>{_html_escape(note)}</p>" if note else "")
         + log_html
         + (f"<p class='muted'>updated {updated}</p>" if updated else "")
@@ -250,6 +263,8 @@ def main(argv):
         set_step(rest[0], rest[1])
     elif cmd == "note" and rest:
         set_note(" ".join(rest))
+    elif cmd == "report" and len(rest) == 1:
+        set_report(rest[0])
     elif cmd == "log" and rest:
         log(" ".join(rest))
     elif cmd == "run" and len(rest) >= 2:

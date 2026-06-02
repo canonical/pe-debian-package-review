@@ -63,6 +63,14 @@ def html(title, body):
             f"<style>{STYLE}</style>{body}").encode("utf-8")
 
 
+def render_markdown(path):
+    body = markdown.markdown(
+        path.read_text(encoding="utf-8"),
+        extensions=["fenced_code", "tables", "toc", "sane_lists"],
+    )
+    return html(path.stem, body)
+
+
 def status_panel():
     """A self-refreshing container that polls the status fragment route."""
     return (f"<div id='review-status'>{review_status.render_html()}</div>"
@@ -130,13 +138,17 @@ class Handler(http.server.BaseHTTPRequestHandler):
     def do_GET(self):
         parts = urllib.parse.urlsplit(self.path)
         if parts.path == URL_PATH:
-            body = markdown.markdown(
-                DOC.read_text(encoding="utf-8"),
-                extensions=["fenced_code", "tables", "toc", "sane_lists"],
-            )
-            self._send(html(DOC.stem, body))
+            self._send(render_markdown(DOC))
         elif parts.path == STATUS_PATH:
             self._send(review_status.render_html().encode("utf-8"))
+        elif parts.path.startswith("/debpr/") and parts.path.endswith(".md"):
+            # Serve any Markdown file living in the repo dir (e.g. review-*.md).
+            name = parts.path[len("/debpr/"):]
+            target = (DIR / name).resolve()
+            if target.parent == DIR and target.is_file():
+                self._send(render_markdown(target))
+            else:
+                self.send_error(404)
         elif parts.path == PPA_PATH:
             q = urllib.parse.parse_qs(parts.query)
             if "pick" in q:  # user chose a specific package
