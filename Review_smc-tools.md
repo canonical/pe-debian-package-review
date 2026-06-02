@@ -21,7 +21,7 @@ the changelog.
 | 3 | debian/changelog | warn |
 | 4 | debian/control | warn |
 | 5 | debian/copyright | warn |
-| 6 | Patches (quilt)/DEP-3 | pass |
+| 6 | debian/patches (quilt/DEP-3) | pass |
 | 7 | Symbols & ABI | n/a |
 | 8 | Lintian (source package) | warn (0 E, 2 W) |
 | 9 | Binary builds (PPA) | pass (5/5 arches) |

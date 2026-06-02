@@ -44,7 +44,7 @@ DEFAULT_STEPS = [
     "debian/changelog",
     "debian/control",
     "debian/copyright",
-    "Patches (quilt) / DEP-3",
+    "debian/patches (quilt/DEP-3)",
     "Symbols & ABI",
     "Lintian (source package)",
     "Binary builds (PPA)",
