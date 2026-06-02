@@ -101,15 +101,18 @@ run without a full binary build:
 
 ## Step 4 — Report
 
-Write a per-package report `Review-<package>.md` summarizing each guide section
+Write a per-package report `Review_<package>.md` summarizing each guide section
 as pass / warn / fail with evidence (command output snippets). Serve it on the
 same server (serve.py renders any repo-local `/debpr/<name>.md`) and link it
 from the status panel:
 
 ```sh
-python3 review_status.py report /debpr/Review-<package>.md
+python3 review_status.py report /debpr/Review_<package>.md
 ```
-then share `http://10.72.172.152:8000/debpr/Review-<package>.md`.
+then share `http://10.72.172.152:8000/debpr/Review_<package>.md`.
+
+The `_` separator (not `-`) makes the package-name boundary unambiguous when
+the package name itself contains hyphens (e.g. `Review_smc-tools.md`).
 
 ## Guardrails (from the guide, Appendix A)
 
