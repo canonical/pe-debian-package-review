@@ -24,6 +24,7 @@ Step <status> is one of: pending active done warn fail skip
 Step <name> is matched case-insensitively against the default steps, or added.
 """
 import json
+import re
 import subprocess
 import sys
 from datetime import datetime, timezone
@@ -240,6 +241,17 @@ def render_html():
         log_html = (f"<p class='muted' style='margin-bottom:.2em'>Activity log "
                     f"(last {len(log_lines)} lines):</p>"
                     f"<pre class='log'>{body}</pre>")
+    note_html = ""
+    if note:
+        note_html = _html_escape(note)
+        if report:
+            basename = report.rsplit("/", 1)[-1]
+            # Turn a "See report" mention into a clickable link to the file.
+            note_html = re.sub(
+                r"See report\.?",
+                f"See <a href='{report}'>{basename}</a>",
+                note_html, flags=re.IGNORECASE)
+        note_html = f"<p class='muted'>{note_html}</p>"
     return (
         "<div class='panel'><h2>Review status</h2>"
         f"<p>{head} &mdash; {done}/{len(steps)} steps</p>"
@@ -247,7 +259,7 @@ def render_html():
         + (f"<p><b>&#128196; <a href='{report}'>See {pkg} report</a></b></p>"
            if report else "")
         + f"<ul class='steps'>{''.join(rows)}</ul>"
-        + (f"<p class='muted'>{_html_escape(note)}</p>" if note else "")
+        + note_html
         + log_html
         + (f"<p class='muted'>updated {updated}</p>" if updated else "")
         + "</div>")
