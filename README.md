@@ -1,349 +1,196 @@
-# DEB Package Review Guide
+# What a DEB Package Review (Ubuntu) Needs
 
-A consolidated checklist and reference for reviewing and sponsoring Debian/Ubuntu
-source packages. This guide merges and restructures two sources:
+A consolidated, explained checklist for reviewing and sponsoring Ubuntu/Debian
+source packages. It merges and restructures two sources — the PE team review
+notes (with the `mediatek-vpud` example and agent guardrails) and the general
+package review checklist — into a single bullet list you can work top to bottom.
 
-- The **PE team DEB package review** working notes (with the `mediatek-vpud`
-  worked example and agent guardrails).
-- The general **Package Review Checklist** (lintian, copyright, symbols, DEP-3,
-  control, build & test conventions).
-
-Use it as a top-to-bottom checklist. A reviewer should insist on every item
-below being satisfied (or an explicit, convincing justification being recorded).
+A reviewer should insist on **every** item below being satisfied, or on an
+explicit, recorded justification for any exception.
 
 ---
 
-## 1. Classify the Review
+## 1. Classify the review first
 
-At least three cases must be distinguished, because each has different rules for
-versioning and target releases:
+- **Identify which of the three review types applies** — the rules for
+  versioning and target releases differ for each:
+  - **needs-packaging** — a brand-new package entering the archive (strictest
+    scrutiny; see §11).
+  - **PATCH** — an update for the Ubuntu release currently in development.
+  - **SRU** — a Stable Release Update for an already-published release.
+- **Check for existing/older versions** with `rmadison <package>` so you know
+  what you are superseding and on which releases it already exists.
+- **Confirm the archive pocket is correct** (`main`, `universe`, `multiverse`,
+  or `restricted`) — it determines support commitments and licensing rules.
+- **Confirm the target release is correct** (`plucky`, `oracular`, `noble`,
+  `jammy`, …) and matches the changelog.
 
-| Case | Trigger | Notes |
-|------|---------|-------|
-| **needs-packaging** | A brand-new package | Requires extra care — see §11 |
-| **PATCH** | Update for an Ubuntu release currently in development | Target the devel series |
-| **SRU** | Update for an already-published Ubuntu release | Stable Release Update rules apply |
+## 2. debian/watch (upstream tracking)
 
-Then sanity-check the landing target:
-
-- Check for existing/older versions of the package:
-  ```sh
-  rmadison <package>        # e.g. rmadison rocm-core
-  ```
-- Confirm the archive **pocket** is correct: `main`, `universe`, `multiverse`,
-  or `restricted`.
-- Confirm the **target release** is correct (`plucky`, `oracular`, `noble`,
-  `jammy`, …).
-
----
-
-## 2. debian/watch
-
-- A watch file **must** be present and correct. A reviewer should always insist
-  on a proper watch file.
-- Verify it:
-  ```sh
-  uscan --watchfile debian/watch --verbose
-  ```
-- Use `uversionmangle` where upstream version strings need normalizing, e.g.:
-  ```
-  uversionmangle=s/(\d+\.\d+\.\d+)\.\d++(.*)/$1/
-  ```
-- Reference example:
-  <https://git.launchpad.net/ubuntu/+source/xlnx-firmware/tree/debian/watch>
-
-Example watch file:
-```
-version=4
-opts="searchmode=plain" \
- https://gitlab.com/mediatek/aiot/rity/vpud/tags?sort=updated_desc \
- -/archive/v?\d[\d.a-f+]+/vpud-@ANY_VERSION@@ARCHIVE_EXT@
-```
-
----
+- **A correct watch file must be present** — it lets tooling discover and verify
+  new upstream releases; a reviewer should always insist on one.
+- **Validate it actually works**: `uscan --watchfile debian/watch --verbose`.
+- **Use `uversionmangle`/`dversionmangle` where needed** to normalize odd
+  upstream version strings into a sane Debian version.
 
 ## 3. debian/changelog
 
-- Keep entries **clear, crisp, and grep-able** — use key words, file names, etc.
-- Verify the **package version** is correct. References:
-  - <https://wiki.ubuntu.com/SecurityTeam/UpdatePreparation#Update_the_packaging>
-  - <https://github.com/canonical/ubuntu-maintainers-handbook/blob/main/VersionStrings.md>
-  - <https://documentation.ubuntu.com/project/how-ubuntu-is-made/concepts/version-strings/>
-- Verify the **target release** is correct (see §1).
-- Verify a proper **signature line** at the end of the block (correct name and
-  email address).
-- A **Launchpad bug** should be referenced, in the form `LP: #1234567` or
-  `(LP: #1234567)`.
-- Write entries in **active form**, e.g.:
-  - `Remove d/p/oldpatch.patch since it's not included in the new version.`
-  - `Update Standards-Version field in d/control to latest level.`
-  - `No-change rebuild.`
-- **Every** change under `debian/*` should be reflected in the changelog, and
-  ideally each changelog line maps to a corresponding git commit (eases later
-  maintenance). Abbreviations are allowed: `d/control`, `d/rules`,
-  `d/p/patchname.patch`, etc.
-- Style preference: avoid literal `d/changelog` / `debian/changelog` lines
-  inside a changelog entry — they are implied and should be omitted.
-- Consider a **NEWS.Debian** file for important changes:
-  <https://www.debian.org/doc/manuals/developers-reference/best-pkging-practices.html#supplementing-changelogs-with-news-debian-files>
-
-Inspect just the top block with:
-```sh
-sed '/^ --/q' debian/changelog
-```
-
----
+- **Entries must be clear, crisp, and grep-able** — use keywords, file names,
+  and patch names so the history is easy to search later.
+- **The package version must be correct** and follow Ubuntu version-string
+  rules (e.g. `-0ubuntuN` for Ubuntu-only packages, `~` for pre-releases).
+- **The target release must be correct** and consistent with §1.
+- **A valid signature line must close the block** with the right name and email.
+- **A Launchpad bug should be referenced** in the form `LP: #1234567` or
+  `(LP: #1234567)` to tie the upload to its tracking bug.
+- **Entries must be in active, imperative form**, e.g. "Remove
+  d/p/oldpatch.patch…", "Update Standards-Version…", "No-change rebuild."
+- **Every change under `debian/*` should be reflected** in the changelog, and
+  ideally each line maps to a git commit to ease later maintenance. Folder
+  abbreviations are fine (`d/control`, `d/rules`, `d/p/name.patch`).
+- **Omit redundant `d/changelog` lines** — a changelog describing itself is
+  implied and just noise.
+- **Consider a NEWS.Debian entry** for changes important enough that users
+  should be told at upgrade time.
 
 ## 4. debian/control
 
-- Run `wrap-and-sort` for consistent formatting.
-- **Architecture**: use `any` where possible.
-- **Section**: for libraries use `libs`; do not let a binary stanza redundantly
-  mirror the source `Section` (lintian: `installable-field-mirrors-source`).
-- Check `Standards-Version` is current:
-  <https://www.debian.org/doc/debian-policy/upgrading-checklist.html>
-  - For Ubuntu devel uploads, target the latest Standards-Version. Find the
-    current devel release name via
-    <https://api.launchpad.net/1.0/ubuntu/devel>.
-  - For uploads to Debian unstable/experimental, also upgrade to the latest
-    Standards-Version.
-- Verify Sections, Descriptions, and other fields are sane.
-- Include upstream metadata (`debian/upstream/metadata`).
-- For autopkgtest control files, prefer `gcc` over `build-essential` (with the
-  `superficial` restriction).
-- Determine whether `update-maintainer` needs to be run (Ubuntu uploads should
-  carry `XSBC-Original-Maintainer`).
-- **Only files inside the `debian/` directory may be modified.**
-
----
+- **Run `wrap-and-sort`** for consistent, diff-friendly formatting.
+- **Use `Architecture: any`** where the software is portable, rather than
+  hard-coding architectures.
+- **Libraries belong in `Section: libs`**, and binary stanzas should not
+  redundantly repeat fields already inherited from the source stanza.
+- **Standards-Version should be current** — bump it (and make the matching
+  policy changes) when targeting the Ubuntu devel series or Debian
+  unstable/experimental.
+- **Fields must be sane** — accurate Sections, meaningful Descriptions, correct
+  dependencies, and upstream metadata (`debian/upstream/metadata`).
+- **Decide whether `update-maintainer` is needed** so Ubuntu uploads carry
+  `XSBC-Original-Maintainer` correctly.
+- **Only files inside `debian/` may be modified** — packaging changes must never
+  touch upstream source directly.
 
 ## 5. debian/copyright
 
-Checked carefully — especially for **needs-packaging**.
-
-- Verify licenses match reality:
-  ```sh
-  lrc                                              # licenserecon; apt install licenserecon
-  licensecheck --check '.*' --recursive --deb-machine --lines 0 -- *
-  licensecheck -r .
-  grep -i copyright *
-  ```
-  `licenserecon` is convenient but not always 100% accurate — cross-check.
-- The file must accurately reflect **upstream** licenses.
-- **Copyright holders for `debian/*` files** must all be listed. Extract Debian
-  authors from `debian/changelog` and ensure every contributor is acknowledged.
-- Rule of thumb: `lrc` output (upstream files) + changelog authors
-  (`debian/*` files) = a complete `debian/copyright`.
-- Remove stale `Files:` patterns that reference paths no longer present in the
-  new upstream (lintian: `superfluous-file-pattern`); pay special attention to
-  vendored trees like `rust-vendor/*` when upstream drops them.
-
-Project: <https://tracker.debian.org/pkg/licenserecon>
-
----
+- **Licenses must match reality** — verify with `licensecheck -r .` and
+  cross-check with `lrc` (licenserecon); treat `lrc` as a guide, not gospel.
+- **It must accurately reflect upstream licensing**, file by file where they
+  differ.
+- **All copyright holders of `debian/*` files must be listed** — extract Debian
+  contributors from `debian/changelog` and acknowledge each one.
+- **Remove stale `Files:` patterns** that point at paths no longer present in
+  the new upstream (watch for dropped vendored trees like `rust-vendor/*`).
+- **Apply the strictest scrutiny for needs-packaging**, where copyright is a
+  primary gate for entering the archive.
 
 ## 6. Patches (quilt) and DEP-3
 
-- All patches must follow the **DEP-3** header standard:
-  - <http://dep.debian.net/deps/dep3/>
-  - <https://documentation.ubuntu.com/project/how-ubuntu-is-made/concepts/deb-3-patch-file-headers/>
-  - Required fields: Description, Origin/Author, Bug (if applicable),
-    Last-Update. Generate/verify with:
-    ```sh
-    quilt header -e --dep3 mypatch.patch
-    ```
-- Confirm the source **format** is correct (`debian/source/format`).
-- Apply and unapply patches cleanly:
-  ```sh
-  export QUILT_PATCHES=debian/patches
-  quilt push -a     # apply all
-  quilt pop  -a     # unapply all (leave tree clean before build)
-  ```
-- Patches **must not report `fuzz`** — fuzz breaks builds. Refresh the offending
-  patch:
-  ```sh
-  quilt push -a --refresh
-  ```
-- **Offsets**: acceptable to leave during SRUs, but should be removed by a
-  refresh for new packages and new patches.
-- If a patch is dropped (already applied upstream), remove it from **both** the
-  `debian/patches/` directory **and** `debian/patches/series`.
-- Clean the `.pc/` directory between operations: `rm -rf .pc`.
-- For `3.0 (quilt)` packages, **never** apply patches directly to upstream files
-  in git commits — always maintain them as quilt patches.
-
----
+- **Every patch needs a DEP-3 header** (Description, Origin/Author, Bug if any,
+  Last-Update) so its purpose and provenance are documented.
+- **The source format must be correct** (`debian/source/format`, typically
+  `3.0 (quilt)`).
+- **All patches must apply cleanly** — `quilt push -a` then `quilt pop -a`,
+  leaving the tree clean before building.
+- **Patches must not report fuzz** — fuzz breaks builds; refresh the patch with
+  `quilt push -a --refresh`.
+- **Offsets** may be left during SRUs but should be refreshed away for new
+  packages and new patches.
+- **Dropped patches must be removed from both** the `debian/patches/` directory
+  **and** the `series` file.
+- **Never edit upstream files directly** in `3.0 (quilt)` packages — all changes
+  go through quilt; clean `.pc/` between operations.
 
 ## 7. Symbols & ABI
 
-- C/C++ libraries **must** ship a symbols file, kept up to date (search the
-  build log for `MINVER` and symbols hints).
-- For C++ symbols, use the `(c++)` format (see the `convert-symbols` helper:
-  <https://github.com/talhaHavadar/dotfiles/blob/main/dot/bin/packaging/convert-symbols>).
-- Make symbol checks strict by adding to `debian/rules`:
-  ```make
-  export DPKG_GENSYMBOLS_CHECK_LEVEL = 4
-  ```
-- Drop any explicit `shlibs` override — it should appear naturally in build logs.
-- Check **SONAMEs**. Matching `.so` version and symlink are fine, e.g.:
-  ```
-  librocm-core.so.1.0.70100
-  librocm-core.so.1 -> librocm-core.so.1.0.70100
-  ```
-- If upstream breaks ABI/API:
-  - Bump the SONAME.
-  - Confirm with upstream that the break is intentional.
-  - The `.so` dev symlink belongs in the `-dev` package.
-  - Rebuild all reverse-dependencies (a library transition).
+- **C/C++ libraries must ship an up-to-date symbols file** so dependency
+  versioning is precise (check the build log for `MINVER` hints).
+- **Use the `(c++)` symbol format** for C++ libraries.
+- **Make symbol checks strict** via `export DPKG_GENSYMBOLS_CHECK_LEVEL = 4` in
+  `debian/rules`, and drop manual `shlibs` overrides.
+- **Verify SONAMEs are consistent** between the real `.so.X.Y.Z` and its
+  `.so.X` symlink.
+- **Handle ABI/API breaks deliberately** — bump the SONAME, confirm the break is
+  intentional with upstream, keep the `.so` dev symlink in `-dev`, and trigger a
+  rebuild of all reverse-dependencies (a library transition).
 
----
+## 8. Build & test
 
-## 8. Build & Test
-
-- Build with **`sbuild`**, and `--run-autopkgtest` whenever possible. Prefer
-  `dpkg-buildpackage -S` for **source-only** builds and `sbuild` for full
-  **binary** builds.
-- **autopkgtest is required** for new packages.
-- Ensure **build hardening flags** are enabled.
-- A **PPA test build** should be done and ideally referenced in an LP bug
-  comment. Confirm:
-  - The build succeeded.
-  - Any tests run as part of the build succeeded (otherwise the build is *not*
-    successful).
-  - Consider extra tests, e.g. install/upgrade the package.
-- Keep `debian/rules` free of excessive workarounds.
-- Use `dh_python` / `dh-python` for Python packages.
-
----
+- **Build with `sbuild`** for full binary builds and **`dpkg-buildpackage -S`**
+  for source-only builds, in a clean chroot.
+- **Run autopkgtests** (`sbuild --run-autopkgtest`) — they are **required** for
+  new packages.
+- **Build hardening flags must be enabled.**
+- **Do a PPA test build** and reference it in the LP bug; the build counts as
+  successful only if its in-build tests also pass.
+- **Consider real-world tests** such as install/upgrade of the resulting binary.
+- **Keep `debian/rules` clean** — no excessive workarounds; use `dh-python` for
+  Python packages.
 
 ## 9. Lintian
 
-Run lintian on **both** the source and the binary packages (binary at minimum):
+- **Run lintian on both source and binary packages** with
+  `lintian -EviL -pedantic` (binaries at minimum).
+- **There must be zero `E:` errors.**
+- **There should be zero `W:` warnings** unless there is a convincing,
+  documented justification; fix as much as possible.
+- **Use `lintian-explain-tags <tag>`** to understand any tag before acting.
+- **Use a documented `lintian-overrides`** only for genuine false positives.
 
-```sh
-lintian -EviL -pedantic                 # source (build with: debuild --no-conf -S -d)
-lintian -EviL -pedantic ../*.deb        # binaries (from local or PPA build)
-```
+## 10. Sponsoring & upload
 
-- There must be **no `E:` (errors)**.
-- There should be **no `W:` (warnings)** unless a convincing justification is
-  given; fix as many issues as possible.
-- Use `lintian-explain-tags <tag>` to understand a tag.
-- For genuine false positives, add a documented `lintian-overrides`.
-- `sbuild` can run lintian post-build with:
-  ```perl
-  $lintian_opts = ['-EviL', '-pedantic'];
-  ```
+- **Attach a debdiff to the LP bug** so reviewers/sponsors can see exactly what
+  changed.
+- **Request sponsoring when needed** — tag the bug `pe-sponsoring-request` and
+  consider subscribing `ubuntu-sponsors`.
+- **Follow up after upload** — confirm the upstream build succeeded, all
+  autopkgtests pass (`update_excuses`), and any SRU validation is completed.
+- **Note:** signing and uploading are human responsibilities (see Appendix A).
 
----
+## 11. New packages (needs-packaging) — extra care
 
-## 10. Sponsoring & Upload
-
-- Attach a **debdiff** to the LP bug.
-- Decide whether **sponsoring** is needed. If so:
-  - Add the tag `pe-sponsoring-request` to the LP bug
-    (<https://bugs.launchpad.net/ubuntu/+bugs?field.tag=pe-sponsoring-request>).
-  - Consider subscribing `ubuntu-sponsors` to the bug.
-- Even after a sponsor uploads, follow up on:
-  - Upstream build success (help fix if it fails).
-  - autopkgtests passing (check `update_excuses`, help fix).
-  - Any required SRU validation steps.
-
-General references:
-- <https://www.debian.org/doc/manuals/developers-reference/best-pkging-practices.html>
-- Upstream should sign their tags.
+- **File a `needs-packaging` LP bug** using the official New Packages template.
+- **Give copyright the strictest review** (see §5) — it gates archive entry.
+- **Follow the target-release rule**: land in the current devel release first,
+  then add to in-service releases newest→oldest. If a partner has only specific
+  releases enabled, a package may land directly there — but record the reason in
+  the bug's Notes (e.g. "only jammy was enabled for Elektrobit").
+- **Example takeaways from `mediatek-vpud`**: recommend upstream adopt semantic
+  versioning, derive a proper Debian version (`0.24.1-0ubuntu1` — the `ubuntu`
+  suffix is required for Ubuntu-only packages), flag the missing `LP: #` in the
+  changelog, and confirm `jammy` was the right target under the partner rule.
 
 ---
 
-## 11. New Package ("needs-packaging") — Extra Care
+## Appendix A — Agent guardrails
 
-New packages need everything above **plus**:
+When an automated agent performs these reviews:
 
-- File an LP bug per <https://wiki.ubuntu.com/UbuntuDevelopment/NewPackages>,
-  tagged `needs-packaging`, filled out using the template at
-  <https://wiki.ubuntu.com/UbuntuDevelopment/NewPackages/ExamplePackageRequest>.
-- `debian/copyright` gets the strictest scrutiny (see §5).
-- **Target release rule**: introduce into the current devel release first, then
-  add to other in-service releases newest→oldest. In PE, a partner may only have
-  specific releases enabled, in which case a new package can land directly on a
-  specific release — record this in the LP bug **Notes**, e.g.:
-  > Notes: Since only jammy was enabled for Elektrobit, this package cannot be
-  > uploaded to any Ubuntu releases newer than jammy (as of today).
-
-### Worked example: `mediatek-vpud`
-
-Obtain the source (manual download example, since LP cmd-line login is TODO):
-```sh
-pull-ppa-source --ppa 'baoshan-ppa/baoshan-proposed' 'mediatek-vpud' 'jammy'
-# fallback: download from the PPA +sourcepub +listing-archive-extra page
-```
-
-Build a local source package and run lintian:
-```sh
-dpkg-buildpackage -S -d --sign-key=<your key>
-lintian -EvIL -pedantic
-```
-Sample lintian output (only `I:` infos — no E/W, so the source is good):
-```
-I: mediatek-vpud source: adopted-extended-field XSBC-Original-Maintainer [debian/control:5]
-I: mediatek-vpud source: installable-field-mirrors-source Section [debian/control:12]
-I: mediatek-vpud source: out-of-date-standards-version 4.1.2 (current is 4.7.0)
-```
-
-Version review for this example:
-- Upstream tags: <https://gitlab.com/mediatek/aiot/rity/vpud/-/tags>
-- Recommend upstream adopt semantic versioning (<https://semver.org/>); the
-  semantic upstream version would be `0.24.1`.
-- Proper Debian version: `0.24.1-0ubuntu1` (the `XubuntuY` suffix is required
-  because an Ubuntu-only package is being introduced).
-- Changelog message `* Bump to 0.24.1.0+eec4966` is **missing a Launchpad bug**.
-- Target `jammy` is correct under the partner-enablement rule above.
-
-Next steps after review:
-1. Adjust the source package per the findings.
-2. Recreate the source package.
-3. Re-run lintian on the source.
-4. Build the binaries in a PPA.
-5. Run lintian on the `*.deb`.
-6. Check the lintian output.
-7. If clean, find a sponsor and add `pe-sponsoring-request`.
-
----
-
-## Appendix A — Agent Guardrails
-
-When an automated agent performs these reviews, it must obey:
-
-- Run build commands with **silent options**, but keep build logs in separate
-  log files so errors can be inspected. Lintian may run with full verbosity.
-- **Do NOT** make signed builds (always use `-us -uc`).
-- **Do NOT** upload to an archive or PPA — those steps are for humans only, even
-  where docs describe them.
-- Generally **no internet access is needed**; if a tool or piece of information
-  is unavailable, **wait for human input** rather than guessing.
-- If a fix is not cleanly doable, **skip it and leave a note** for the human.
-- After a failed fix, **clean and restore** the tree to the last good commit
+- **Run builds with silent options but keep build logs in separate files** so
+  failures can still be inspected; lintian may run with full verbosity.
+- **Never make signed builds** — always `-us -uc`.
+- **Never upload to an archive or PPA** — that is human-only.
+- **Stay offline by default** — if a tool or fact is unavailable, prefer to stop
+  and ask rather than guess.
+- **Skip a fix that cannot be done cleanly** and leave a note for the human.
+- **After a failed fix, restore the tree** to the last good commit
   (`git checkout -- . && git clean -fd`).
-- After **each** fix, redo source and binary builds, then re-run lintian.
-- Keep changes as **separate git commits**.
-- **Do NOT** modify existing branches — only use branches created by the agent
-  or by `gbp`.
-- Log every action to `AGENT_LOG.md` (one-line summary plus the exact command),
-  so a second agent can resume from the log and repo state.
-- Prefer **`dpkg-buildpackage`** for source-only builds and **`sbuild`** for
-  full binary builds.
+- **Rebuild and re-run lintian after every fix.**
+- **Keep changes as separate commits**, and only use branches created by the
+  agent or by `gbp` — never modify pre-existing branches.
+- **Log every action to `AGENT_LOG.md`** (one-line summary plus the exact
+  command) so another agent can resume from the log and repo state.
 
-## Appendix B — Quick Command Reference
+## Appendix B — Quick command reference
 
 ```sh
 rmadison <package>                         # existing versions across releases
 uscan --watchfile debian/watch --verbose   # validate watch file
-uscan --safe                               # check for new upstream
+uscan --safe                               # check for a new upstream release
 licensecheck -r .                          # license scan
 lrc                                        # licenserecon cross-check
-quilt push -a / quilt pop -a               # apply / unapply patches
-quilt push -a --refresh                    # refresh patches (kill fuzz)
-quilt header -e --dep3 <patch>             # DEP-3 header
+quilt push -a / quilt pop -a               # apply / unapply all patches
+quilt push -a --refresh                    # refresh patches (remove fuzz)
+quilt header -e --dep3 <patch>             # edit/verify a DEP-3 header
 dpkg-buildpackage -S -us -uc               # source-only build (unsigned)
 sbuild --run-autopkgtest                   # full binary build + tests
 lintian -EviL -pedantic [../*.deb]         # lint source / binaries
