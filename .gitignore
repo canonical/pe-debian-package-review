@@ -3,3 +3,4 @@ __pycache__/
 .serve.file
 .ppa-request
 .review-status.json
+.review-log

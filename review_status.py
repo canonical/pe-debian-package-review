@@ -2,26 +2,36 @@
 """Track and render the status of a PPA package review.
 
 The review process (the agent) updates a small JSON state file as it works;
-serve.py renders it as a panel at the bottom of the PPA page.
+serve.py renders it as a panel at the bottom of the PPA page. A separate
+append-only log file carries timestamped, line-by-line activity so long steps
+(e.g. fetching source) show continuous progress instead of looking hung.
 
-State file: .review-status.json (gitignored)
+State file: .review-status.json   Log file: .review-log   (both gitignored)
 
 CLI:
   python3 review_status.py init <ppa> <package>     start/reset a review
   python3 review_status.py step <name> <status>     set one step's status
   python3 review_status.py note <text>              set the free-text note
+  python3 review_status.py log <text...>            append one activity line
+  python3 review_status.py run <name> <cmd...>      mark step active, stream the
+                                                    command's output to the log,
+                                                    then mark done/fail by exit
   python3 review_status.py show                      print the current state
-  python3 review_status.py clear                     remove the state file
+  python3 review_status.py clear                     remove state + log
 
 Step <status> is one of: pending active done warn fail skip
 Step <name> is matched case-insensitively against the default steps, or added.
 """
 import json
+import subprocess
 import sys
 from datetime import datetime, timezone
 from pathlib import Path
 
-STATE_FILE = Path(__file__).resolve().parent / ".review-status.json"
+DIR = Path(__file__).resolve().parent
+STATE_FILE = DIR / ".review-status.json"
+LOG_FILE = DIR / ".review-log"
+LOG_TAIL = 14  # number of recent activity lines to show in the panel
 
 # The default pipeline, mirroring AGENT-ppa-review.md.
 DEFAULT_STEPS = [
@@ -49,7 +59,11 @@ LABELS = {
 
 
 def _now():
-    return datetime.now(timezone.utc).isoformat(timespec="seconds")
+    return datetime.now(timezone.utc)
+
+
+def _iso(dt=None):
+    return (dt or _now()).isoformat(timespec="seconds")
 
 
 def load():
@@ -62,32 +76,53 @@ def load():
 
 
 def save(state):
-    state["updated"] = _now()
+    state["updated"] = _iso()
     STATE_FILE.write_text(json.dumps(state, indent=2) + "\n", encoding="utf-8")
 
 
+def log(text):
+    """Append one timestamped activity line; force a flush so polls see it."""
+    stamp = _now().strftime("%H:%M:%S")
+    with LOG_FILE.open("a", encoding="utf-8") as fh:
+        for line in str(text).splitlines() or [""]:
+            fh.write(f"{stamp}  {line}\n")
+        fh.flush()
+
+
 def init(ppa, package):
+    LOG_FILE.write_text("", encoding="utf-8")
     save({
         "ppa": ppa,
         "package": package,
         "note": "Review started.",
-        "steps": [{"name": n, "status": "pending"} for n in DEFAULT_STEPS],
+        "steps": [{"name": n, "status": "pending", "started": None,
+                   "ended": None} for n in DEFAULT_STEPS],
     })
+    log(f"Review started for {package} from {ppa}.")
 
 
 def set_step(name, status):
     if status not in LABELS:
         sys.exit(f"unknown status {status!r}; use one of {' '.join(LABELS)}")
     state = load() or {"ppa": "", "package": "",
-                       "steps": [{"name": n, "status": "pending"}
+                       "steps": [{"name": n, "status": "pending",
+                                  "started": None, "ended": None}
                                  for n in DEFAULT_STEPS]}
     for s in state["steps"]:
         if s["name"].lower() == name.lower():
+            if status == "active" and not s.get("started"):
+                s["started"] = _iso()
+            if status in ("done", "warn", "fail", "skip"):
+                s["ended"] = _iso()
             s["status"] = status
+            name = s["name"]
             break
     else:
-        state["steps"].append({"name": name, "status": status})
+        state["steps"].append({"name": name, "status": status,
+                               "started": _iso() if status == "active" else None,
+                               "ended": None})
     save(state)
+    log(f"-- {name}: {status}")
 
 
 def set_note(text):
@@ -96,17 +131,60 @@ def set_note(text):
         sys.exit("no review in progress; run `init` first")
     state["note"] = text
     save(state)
+    log(text)
+
+
+def run(name, cmd):
+    """Mark a step active, stream the command output to the log, set result."""
+    set_step(name, "active")
+    log(f"$ {' '.join(cmd)}")
+    try:
+        proc = subprocess.Popen(cmd, stdout=subprocess.PIPE,
+                                stderr=subprocess.STDOUT, text=True, bufsize=1)
+    except OSError as exc:
+        log(f"[could not start: {exc}]")
+        set_step(name, "fail")
+        return 127
+    for line in proc.stdout:
+        log(line.rstrip("\n"))
+    rc = proc.wait()
+    log(f"[exit {rc}]")
+    set_step(name, "done" if rc == 0 else "fail")
+    return rc
+
+
+def _elapsed(started, ended=None):
+    try:
+        a = datetime.fromisoformat(started)
+    except (TypeError, ValueError):
+        return ""
+    b = datetime.fromisoformat(ended) if ended else _now()
+    secs = int((b - a).total_seconds())
+    if secs < 60:
+        return f"{secs}s"
+    return f"{secs // 60}m{secs % 60:02d}s"
 
 
 def current(state):
-    """The name of the active step, else the first pending one, else None."""
+    """The active step, else the first pending one, else None."""
     for s in state["steps"]:
         if s["status"] == "active":
-            return s["name"]
+            return s
     for s in state["steps"]:
         if s["status"] == "pending":
-            return s["name"]
+            return s
     return None
+
+
+def _tail_log():
+    if not LOG_FILE.is_file():
+        return []
+    lines = LOG_FILE.read_text(encoding="utf-8").splitlines()
+    return lines[-LOG_TAIL:]
+
+
+def _html_escape(s):
+    return (s.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;"))
 
 
 def render_html():
@@ -118,28 +196,46 @@ def render_html():
     steps = state.get("steps", [])
     done = sum(1 for s in steps if s["status"] in ("done", "skip"))
     cur = current(state)
+    cur_name = cur["name"] if cur else None
     rows = []
     for s in steps:
         glyph, color = LABELS.get(s["status"], LABELS["pending"])
-        weight = "font-weight:600;" if s["name"] == cur else ""
+        weight = "font-weight:600;" if s["name"] == cur_name else ""
+        extra = ""
+        if s["status"] == "active" and s.get("started"):
+            extra = f" <span class='muted'>({_elapsed(s['started'])} elapsed)</span>"
+        elif s.get("started") and s.get("ended"):
+            extra = f" <span class='muted'>({_elapsed(s['started'], s['ended'])})</span>"
         rows.append(
             f"<li style='{weight}'><span style='color:{color}'>{glyph}</span> "
-            f"{s['name']} "
-            f"<span class='muted'>&mdash; {s['status']}</span></li>")
+            f"{s['name']} <span class='muted'>&mdash; {s['status']}</span>{extra}</li>")
     pkg = state.get("package") or "?"
     ppa = state.get("ppa") or "?"
     note = state.get("note", "")
     updated = state.get("updated", "")
     head = (f"Reviewing <code>{pkg}</code> from <code>{ppa}</code>"
             if pkg != "?" else "Review")
-    cur_line = (f"<p><b>Current step:</b> {cur}</p>" if cur
-                else "<p class='ok'><b>Review complete.</b></p>")
+    if cur and cur["status"] == "active":
+        el = _elapsed(cur.get("started")) if cur.get("started") else ""
+        cur_line = f"<p><b>Current step:</b> {cur['name']} &mdash; running {el}</p>"
+    elif cur:
+        cur_line = f"<p><b>Next step:</b> {cur['name']}</p>"
+    else:
+        cur_line = "<p class='ok'><b>Review complete.</b></p>"
+    log_lines = _tail_log()
+    log_html = ""
+    if log_lines:
+        body = _html_escape("\n".join(log_lines))
+        log_html = (f"<p class='muted' style='margin-bottom:.2em'>Activity log "
+                    f"(last {len(log_lines)} lines):</p>"
+                    f"<pre class='log'>{body}</pre>")
     return (
         "<div class='panel'><h2>Review status</h2>"
         f"<p>{head} &mdash; {done}/{len(steps)} steps</p>"
         f"{cur_line}"
         f"<ul class='steps'>{''.join(rows)}</ul>"
-        + (f"<p class='muted'>{note}</p>" if note else "")
+        + (f"<p class='muted'>{_html_escape(note)}</p>" if note else "")
+        + log_html
         + (f"<p class='muted'>updated {updated}</p>" if updated else "")
         + "</div>")
 
@@ -154,11 +250,16 @@ def main(argv):
         set_step(rest[0], rest[1])
     elif cmd == "note" and rest:
         set_note(" ".join(rest))
+    elif cmd == "log" and rest:
+        log(" ".join(rest))
+    elif cmd == "run" and len(rest) >= 2:
+        sys.exit(run(rest[0], rest[1:]))
     elif cmd == "show":
         state = load()
         print(json.dumps(state, indent=2) if state else "(no review)")
     elif cmd == "clear":
         STATE_FILE.unlink(missing_ok=True)
+        LOG_FILE.unlink(missing_ok=True)
     else:
         sys.exit(__doc__)
 

@@ -48,7 +48,9 @@ STYLE = ("body{max-width:900px;margin:auto;padding:2rem;"
          ".ok{color:#070}.err{color:#b00}.muted{color:#57606a;font-size:.9em}"
          ".panel{margin-top:2.5rem;border-top:2px solid #d0d7de;padding-top:1rem}"
          ".steps{list-style:none;padding-left:0}"
-         ".steps li{padding:.15em 0}")
+         ".steps li{padding:.15em 0}"
+         ".log{background:#0d1117;color:#c9d1d9;font-size:.82em;line-height:1.45;"
+         "max-height:16em;overflow:auto;padding:.7em .9em;border-radius:6px}")
 
 
 def esc(s):
@@ -66,7 +68,8 @@ def status_panel():
             "<script>setInterval(function(){"
             f"fetch('{STATUS_PATH}').then(function(r){{return r.text();}})"
             ".then(function(t){document.getElementById('review-status')"
-            ".innerHTML=t;});},5000);</script>")
+            ".innerHTML=t;var l=document.querySelector('#review-status .log');"
+            "if(l){l.scrollTop=l.scrollHeight;}});},3000);</script>")
 
 
 def ppa_form(msg=""):
