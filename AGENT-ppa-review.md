@@ -39,15 +39,39 @@ If there are several packages, confirm with the user which one(s) to review
 
 ## Step 2 — Fetch the source
 
-For each chosen package, pull the source for its series (no signing, no upload):
+For each chosen package, pull the source for its series (no signing, no upload).
+Use the helper, which reads the latest pick from `.ppa-request`, cleans the
+scratch dir, and runs the correct command:
 
 ```sh
-pull-ppa-source --ppa OWNER/ARCHIVE <package> <series>
-# fallback: dget the .dsc from the PPA's +sourcepub listing
-dpkg-source -x <package>_<version>.dsc      # extract into a tree
+./fetch-source.sh                       # uses the picked package in .ppa-request
+./fetch-source.sh OWNER/ARCHIVE PKG SERIES   # or specify explicitly
 ```
 
-Work inside `/tmp/opencode/ppa-review/<package>` to keep the repo clean.
+Under the hood that is:
+
+```sh
+pull-ppa-source --no-verify-signature --ppa OWNER/ARCHIVE <package> <series>
+```
+
+Notes / common mistakes:
+
+- Use `pull-ppa-source`, **not** `pull-lp-source` — the latter pulls from the
+  main Ubuntu archive and has no working PPA support.
+- Pass the PPA as `OWNER/ARCHIVE` (no `ppa:` prefix) and **always** pass the
+  `<series>`; otherwise it may look in the wrong release.
+- Remove any existing extraction dir first — `pull-ppa-source` aborts with
+  "Source unpack failed" if the target directory already exists.
+- `--no-verify-signature` is expected here (PPA signing keys aren't imported);
+  it must not abort a read-only review fetch.
+
+Work inside `/tmp/opencode/ppa-review/<package>` to keep the repo clean. The
+helper writes the extracted tree path to `/tmp/opencode/ppa-review/.last-source`.
+If the helper isn't used, extract manually:
+
+```sh
+dpkg-source -x <package>_<version>.dsc      # extract into a tree
+```
 
 ## Step 3 — Review against the guide
 
