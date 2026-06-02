@@ -151,6 +151,7 @@ def fetch(owner, archive, package, series=""):
     cmd = ["pull-ppa-source", "--no-verify-signature", "--ppa",
            owner_archive, package] + ([series] if series else [])
     print("+ " + " ".join(cmd))
+    sys.stdout.flush()  # so pull-ppa-source's own output stays after our lines
     rc = subprocess.run(cmd, cwd=WORK).returncode
     if rc != 0:
         print(f"pull-ppa-source failed (exit {rc})", file=sys.stderr)
@@ -187,6 +188,7 @@ def binaries(owner, archive, package, series=""):
         os.remove(d)
     cmd = ["pull-ppa-source", "--no-verify-signature", "-p", "debs", "--ppa",
            f"{owner}/{archive}", package] + ([series] if series else [])
+    sys.stdout.flush()  # so pull-ppa-source's own output stays after our lines
     subprocess.run(cmd, cwd=WORK)
     debs = sorted(glob.glob(os.path.join(WORK, "*.deb")))
     if debs:
