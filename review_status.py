@@ -245,15 +245,18 @@ def render_html():
                     f"<pre class='log'>{body}</pre>")
     note_html = ""
     if note:
-        note_html = _html_escape(note)
+        text = _html_escape(note)
+        link_html = ""
         if report:
             basename = report.rsplit("/", 1)[-1]
-            # Turn a "See report" mention into a clickable link to the file.
-            note_html = re.sub(
-                r"See report\.?",
-                f"See <a href='{report}'>{basename}</a>",
-                note_html, flags=re.IGNORECASE)
-        note_html = f"<p class='muted'>{note_html}</p>"
+            # Split off a trailing "See report" mention onto its own line as a
+            # clickable link to the report file.
+            text, n = re.subn(r"\s*See report\.?\s*$", "", text,
+                              flags=re.IGNORECASE)
+            if n:
+                link_html = (f"<p class='muted'>See "
+                             f"<a href='{report}'>{basename}</a></p>")
+        note_html = f"<p class='muted'>{text}</p>{link_html}"
     return (
         "<div class='panel'><h2>Review status</h2>"
         f"<p>{head} &mdash; {done}/{len(steps)} steps</p>"
