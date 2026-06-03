@@ -207,7 +207,11 @@ def render_html():
                 "<p class='muted'>No review in progress. Submit a PPA and pick a "
                 "package to begin.</p></div>")
     steps = state.get("steps", [])
-    done = sum(1 for s in steps if s["status"] in ("done", "skip"))
+    # "reviewed" = reached a terminal verdict (incl. warn/fail findings & skip),
+    # i.e. not still pending/active. So the count reaches N/N when the whole
+    # review is done, even though some steps are warnings or failures.
+    done = sum(1 for s in steps
+               if s["status"] in ("done", "skip", "warn", "fail"))
     cur = current(state)
     cur_name = cur["name"] if cur else None
     rows = []
@@ -259,7 +263,7 @@ def render_html():
         note_html = f"<p class='muted'>{text}</p>{link_html}"
     return (
         "<div class='panel'><h2>Review status</h2>"
-        f"<p>{head} &mdash; {done}/{len(steps)} steps</p>"
+        f"<p>{head} &mdash; {done}/{len(steps)} steps reviewed</p>"
         f"{cur_line}"
         + (f"<p><b>&#128196; <a href='{report}'>See {pkg} report</a></b></p>"
            if report else "")
