@@ -2,171 +2,124 @@
 
 - **Package:** smc-tools
 - **Version:** 1.8.7-0ubuntu1
-- **Target:** resolute (Ubuntu devel), universe
+- **Target:** resolute (Ubuntu devel)
 - **PPA:** https://launchpad.net/~fheimes/+archive/ubuntu/test
 - **Source:** `/tmp/opencode/ppa-review/smc-tools-1.8.7`
 - **Reviewed against:** `Package-Review-Guide_README.md`
 
 ## Verdict
 
-**Changes requested.** No blocking build/license errors, but there are several
-correctness issues that should be fixed before sponsoring — most importantly a
-**non-functional `debian/watch`** and a **placeholder `LP: #` bug number** in
-the changelog.
+**Changes requested.** There are **no blocking build or license errors** and all
+5 architectures build, but two **must-fix** correctness issues (a non-functional
+`debian/watch` and a placeholder `LP: #` bug number) and three should-fix items
+need addressing before sponsoring.
 
-| # | Section | Result |
-|---|---------|--------|
-| 1 | Classify | warn |
-| 2 | debian/watch | **fail** |
-| 3 | debian/changelog | warn |
-| 4 | debian/control | warn |
-| 5 | debian/copyright | warn |
-| 6 | debian/patches (quilt/DEP-3) | pass |
+| # | Step | Result |
+|---|------|--------|
+| 1 | Classify (PATCH/SRU/new) | pass |
+| 2 | debian/watch | **must-fix** |
+| 3 | debian/changelog | **must-fix** |
+| 4 | debian/control | should-fix |
+| 5 | debian/copyright | should-fix |
+| 6 | debian/patches (quilt/DEP-3) | should-fix |
 | 7 | Symbols & ABI | n/a |
-| 8 | Lintian (source package) | warn (0 E, 2 W) |
+| 8 | Lintian (source package) | 0 E, 2 W |
 | 9 | Binary builds (PPA) | pass (5/5 arches) |
-| 10 | Lintian (binary packages) | warn (0 E) |
+| 10 | Lintian (binary packages) | 0 E, 1 W (+ container noise) |
+
+## Classification
+
+New **upstream release** (1.8.6 → 1.8.7) uploaded to the **development series
+`resolute`**. Version `-0ubuntu1` (Ubuntu-only package, no Debian revision).
+This is a normal devel-series upload — **not** an SRU and **not**
+needs-packaging. `Standards-Version: 4.7.2` is current.
 
 ## Must fix (blocking)
 
 1. **`debian/watch` is malformed and non-functional.**
-   The file uses a `Version: 5` / `Template: Github` / `Owner:` / `Project:`
-   syntax that is **not** valid uscan format. `uscan` parses it as an obsolete
-   *version 1* watch file and skips every line, so upstream version tracking
-   does not work at all. Lintian also flags
-   `missing-debian-watch-file-standard`.
-   - A valid v5 file must start with lowercase `version=5` and contain a real
-     URL/match line, e.g. for GitHub tags:
+   The file uses a `Version: 5` / `Template: Github` / `Owner: ...` /
+   `Project: ...` syntax that is **not** valid uscan format. `uscan` parses it
+   as an obsolete *version 1* watch file and **skips every line**
+   (`Skipping the line: Version: 5`, etc.), so upstream version tracking does
+   not work at all. Lintian corroborates this with
+   `W: missing-debian-watch-file-standard [debian/watch]`.
+   - Additionally, `Owner: ibm-s390-tools` does not match the actual upstream
+     GitHub org `ibm-s390-linux` (per `Homepage`).
+   - A valid v5 file must start with lowercase `version=5` and a real URL/match
+     line, e.g. for GitHub tags:
      ```
      version=5
      opts="mode=git,pgpmode=none" \
        https://github.com/ibm-s390-linux/smc-tools.git \
        refs/tags/v?(\d[\d.]*)
      ```
-   - Note also the **wrong upstream org**: `Owner: ibm-s390-tools`, while the
-     real repo (and `Homepage:`) is `github.com/ibm-s390-linux/smc-tools`.
+   - Verify with `uscan --watchfile debian/watch --no-download`.
 
 2. **Placeholder bug reference in `debian/changelog`.**
-   The top entry reads `New upstream release. (LP: #1234567)`. `#1234567` is a
-   placeholder, not a real Launchpad bug. Replace it with the actual bug number
-   or drop the `LP:` tag. The entry is also unusually terse compared to the
-   detailed history below it.
+   The top entry reads `* New upstream release. (LP: #1234567)`. `LP: #1234567`
+   is a placeholder, not a real bug. Replace it with the actual Launchpad bug
+   for the 1.8.7 update, or remove the `LP: #` reference if none applies.
 
 ## Should fix (non-blocking)
 
-3. **Stale copyright years (`debian/copyright`).**
-   `Files: *` declares `Copyright: 2016-2018 IBM Corp`, but source files carry
-   IBM Corp copyright through **2021**. Lintian: `update-debian-copyright 2018
-   vs 2026`. Extend the year ranges (and the `debian/*` 2018 Canonical stanza).
+3. **`debian/control` Maintainer.** `Maintainer` is an individual
+   (`Dimitri John Ledkov <xnox@ubuntu.com>`). For an Ubuntu-maintained package
+   this should be `Ubuntu Developers
+   <ubuntu-devel-discuss@lists.ubuntu.com>` with the original preserved in
+   `XSBC-Original-Maintainer` (use `update-maintainer`). `wrap-and-sort` is
+   clean and `Homepage` points at the correct upstream org.
 
-4. **Maintainer field (`debian/control`).**
-   `Maintainer: Dimitri John Ledkov <xnox@ubuntu.com>` (personal). Ubuntu
-   convention for archive uploads is
-   `Maintainer: Ubuntu Developers <ubuntu-devel-discuss@lists.ubuntu.com>`
-   (with `XSBC-Original-Maintainer` if applicable).
+4. **Stale copyright years in `debian/copyright`.** `Files: *` declares
+   `2016-2018 IBM Corp`, but upstream source files carry copyright years up to
+   **2021**. Update the span (e.g. `2016-2021`). The `debian/*` GPL-3 and
+   upstream EPL-1.0 declarations are otherwise fine.
 
-5. **Forward the portability/typo patches.**
-   `fix_folder_31_32_bit_systems.patch` and `fix_typo_in_manual_page.patch` are
-   `Forwarded: no`. These are generally useful upstream — submit them and set
-   `Forwarded:` to the URL. (`fix_library_path.patch` `not-needed` is fine.)
+5. **Patch forwarding (DEP-3).** All three patches apply cleanly with no fuzz
+   (`quilt push -a` / `pop -a` OK), but:
+   - `fix_folder_31_32_bit_systems.patch` has **no `Forwarded` field** — add one
+     (and forward upstream, or `Forwarded: not-needed` with a reason).
+   - `fix_typo_in_manual_page.patch` has `Forwarded: no` — a manual-page typo
+     fix should be **forwarded upstream**; update the field once submitted.
+   - `fix_library_path.patch` is fine (`Forwarded: not-needed`, Ubuntu-specific,
+     with Bug-Ubuntu/Bug-IBM references).
 
-## Nice to have
+## Tool output
 
-- Add `debian/upstream/metadata` (lintian `upstream-metadata-file-is-missing`).
-- Set `Rules-Requires-Root: no` in `debian/control` (lintian pedantic
-  `silent-on-rules-requiring-root`).
+### Lintian — source package (0 errors, 2 warnings)
 
-## What passed
-
-- **Classification:** new-upstream-version update to the devel release
-  (resolute); not an SRU. Archive has 1.8.3 (noble) / 1.8.5 (questing); 1.8.7
-  is already in resolute/stonking.
-- **Patches:** all 3 apply cleanly via `quilt push -a` (no fuzz/offset) and
-  carry complete DEP-3 headers.
-- **control:** `wrap-and-sort -n` clean; `debhelper-compat (= 13)`;
-  `Standards-Version: 4.7.2` (current — the lintian `newer-standards-version`
-  warning is a false positive from an older lintian DB); source format
-  `3.0 (quilt)`.
-- **copyright:** valid DEP-5; EPL-1.0 with full license text; no conflicting
-  licenses detected (`licensecheck`).
-- **Symbols/ABI:** n/a — `libsmc-preload.so` is an `LD_PRELOAD` shim with no
-  SONAME/public ABI, so no symbols file is required.
-- **Binary builds (PPA):** **all 5 architectures built successfully** —
-  amd64, arm64, armhf, ppc64el, s390x. No failed builds; no build log to chase.
-
-## Lintian — full results
-
-Two runs: `lintian -EvIL +pedantic` on the source `.dsc`, and the same on the
-published binary `.deb`. Severities map to the review as: **E (error) = must
-fix**, **W (warning) = should fix**; I/P/X are informational.
-
-### Lintian errors (must fix)
-
-**None.** Both the source package and the binary package produced **0 errors**.
-
-### Lintian warnings (should fix)
-
-Source package (`smc-tools_1.8.7-0ubuntu1.dsc`) — 2 warnings:
-
-| Tag | Location | Meaning / action |
-|-----|----------|------------------|
-| `missing-debian-watch-file-standard` | `debian/watch` | The watch file doesn't start with a `version=` line, so lintian can't read its standard — corroborates the broken watch (Must-fix #1). Fix `debian/watch` to a real `version=5` file. |
-| `newer-standards-version 4.7.2 (current is 4.6.2)` | `debian/control` | **False positive here** — the package's `Standards-Version: 4.7.2` is *newer* than this (older) lintian's database knows about. No action; nothing to downgrade. |
-
-Binary package (`smc-tools_1.8.7-0ubuntu1_amd64.deb`) — 1 real warning
-(+ 24 environment-noise warnings, see below):
-
-| Tag | Location | Meaning / action |
-|-----|----------|------------------|
-| `no-manual-page` | `usr/bin/smc_dbg` | The `smc_dbg` binary installed in `/usr/bin` ships no man page. Every program in `/usr/bin` should have one (a symlink to a shared page is acceptable). Add a man page or a symlink. |
-
-Environment-noise warnings (NOT package defects — do not action):
-
-- 24 × `groff-message` of two kinds — 11 × `command exited with status 2` and
-  13 × `troff: Segmentation fault (core dumped)` — across
-  `af_smc.7`, `smc_pnet.8`, `smc_run.8`, `smcd-device.8`, `smcd-info.8`,
-  `smcd-linkgroup.8`, `smcd-seid.8`, `smcd-stats.8`, `smcd-ueid.8`, `smcd.8`,
-  `smcr.8`, `smcss.8`. These come from a **broken groff/troff in this review
-  container** (troff is literally segfaulting), not from the man pages
-  themselves. Re-check on a normal builder before trusting them.
-
-### Lintian info / pedantic (nice to have)
-
-| Tag | Where | Note |
-|-----|-------|------|
-| `hardening-no-bindnow` (I) | binary `usr/lib/libsmc-preload.so` | Build with now-binding hardening flags. |
-| `patch-not-forwarded-upstream` (I, ×2) | `fix_folder_31_32_bit_systems.patch`, `fix_typo_in_manual_page.patch` | See Should-fix #5. |
-| `renamed-tag` (P) | binary `usr/share/lintian/overrides/smc-tools:4` | Update the override `ldconfig-symlink-missing-for-shlib` → `lacks-versioned-link-to-shared-library`. |
-| `silent-on-rules-requiring-root` (P) | `debian/control` | Set `Rules-Requires-Root: no`. |
-| `update-debian-copyright 2018 vs 2026` (X) | `debian/copyright:232` | See Should-fix #3. |
-| `upstream-metadata-file-is-missing` (X) | source | Add `debian/upstream/metadata`. |
-
-## What else passed
-
-- **Classification:** new-upstream-version update to the devel release
-  (resolute); not an SRU. Archive has 1.8.3 (noble) / 1.8.5 (questing); 1.8.7
-  is already in resolute/stonking.
-- **Patches:** all 3 apply cleanly via `quilt push -a` (no fuzz/offset) and
-  carry complete DEP-3 headers.
-- **control:** `wrap-and-sort -n` clean; `debhelper-compat (= 13)`;
-  `Standards-Version: 4.7.2` (current); source format `3.0 (quilt)`.
-- **copyright:** valid DEP-5; EPL-1.0 with full license text; no conflicting
-  licenses detected (`licensecheck`).
-
-## Commands used
-
-```sh
-./fetch-source.sh                                  # pull-ppa-source + extract
-rmadison smc-tools                                 # archive versions
-uscan --watchfile debian/watch --no-download ...   # watch check (rejected)
-wrap-and-sort -n -a                                # control tidiness (clean)
-licensecheck -r .                                  # copyright cross-check
-QUILT_PATCHES=debian/patches quilt push -a         # patch apply (clean)
-lintian -EvIL +pedantic smc-tools_1.8.7-0ubuntu1.dsc
-./check-binaries.sh                                # build status + download debs
-lintian -EvIL +pedantic *.deb                      # binary lintian
+```
+W: smc-tools source: missing-debian-watch-file-standard [debian/watch]
+W: smc-tools source: newer-standards-version 4.7.2 (current is 4.6.2)
 ```
 
-> No signed build and no upload were performed (read-only review). No local
-> binary build (`sbuild` unavailable); instead the PPA's own binary builds were
-> checked via Launchpad and the published `.deb`s were lint-checked.
+- `missing-debian-watch-file-standard` — a direct symptom of must-fix #1.
+- `newer-standards-version 4.7.2` — **false positive**: this lintian's database
+  predates Policy 4.7.2; 4.7.2 is the current Standards-Version. No action.
+
+### Binary builds (PPA) — 5/5 architectures
+
+`amd64`, `arm64`, `armhf`, `ppc64el`, `s390x` all **Successfully built**.
+
+### Lintian — binary packages (0 errors, 1 real warning)
+
+```
+W: smc-tools: no-manual-page [usr/bin/smc_dbg]
+```
+
+- `no-manual-page [usr/bin/smc_dbg]` — `smc_dbg` ships without a man page;
+  worth adding one upstream/in packaging, but non-blocking.
+- The ~24 `groff-message ... troff: Segmentation fault` warnings are **review
+  container artifacts** (troff/groff crashes in this environment when rendering
+  the shipped man pages); they are **not** package defects and should be
+  disregarded.
+
+## Symbols & ABI — not applicable
+
+The package ships `libsmc-preload.so` purely as an **`LD_PRELOAD` shim** with no
+SONAME and no public library ABI, so symbols/shlibs tracking does not apply.
+
+## Summary for the uploader
+
+Fix the two blockers (`debian/watch`, placeholder `LP: #`) and ideally the three
+should-fix items (Maintainer, copyright years, patch forwarding), then re-upload.
+Builds and licensing are otherwise in good shape.
