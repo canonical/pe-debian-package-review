@@ -10,10 +10,11 @@ CLI:
   python3 ppa.py builds <ppa-ref> <pkg> [series]    # list per-arch build status
   python3 ppa.py fetch [<ppa-ref> <pkg> [series]]   # pull & unpack source
   python3 ppa.py binaries [<ppa-ref> <pkg> [series]]# build status + download debs
-  python3 ppa.py current                            # show the recorded pick
+  python3 ppa.py current                            # show the under-review target
 
-For fetch/binaries/current, a missing target is read from .ppa-request (the pick
-recorded by the web form).
+For fetch/binaries/current, a missing target is read from the review state file
+.review-status.json (the package picked on the web form / via review_status.py
+init) -- there is no separate request file.
 """
 import glob
 import json
@@ -26,7 +27,7 @@ import urllib.request
 
 API = "https://api.launchpad.net/devel"
 DIR = os.path.dirname(os.path.abspath(__file__))
-REQUEST_FILE = os.path.join(DIR, ".ppa-request")
+STATE_FILE = os.path.join(DIR, ".review-status.json")
 WORK = "/tmp/opencode/ppa-review"
 
 
@@ -103,31 +104,37 @@ def list_builds(owner: str, archive: str, package: str, series=None):
 
 
 def read_request():
-    """Parse the newest line of .ppa-request into a dict, or return None.
+    """Return the under-review target from .review-status.json, or None.
 
-    Line format: <ts>\tppa:owner/archive\t<url>\t<package>\t<series>
+    Pulls owner/archive/package/series straight out of the review state file
+    (written by review_status.init). Falls back to parsing the "ppa" field if
+    the discrete owner/archive aren't present (older state).
     """
     try:
-        text = open(REQUEST_FILE, encoding="utf-8").read()
-    except FileNotFoundError:
+        state = json.load(open(STATE_FILE, encoding="utf-8"))
+    except (FileNotFoundError, ValueError, OSError):
         return None
-    lines = [ln for ln in text.splitlines() if ln.strip()]
-    if not lines:
+    owner = state.get("owner") or ""
+    archive = state.get("archive") or ""
+    if not (owner and archive) and state.get("ppa"):
+        try:
+            owner, archive = normalize(state["ppa"])
+        except ValueError:
+            pass
+    if not (owner and archive):
         return None
-    parts = (lines[-1].split("\t") + [""] * 5)[:5]
-    owner, archive = normalize(parts[1]) if parts[1] else ("", "")
     return {"owner": owner, "archive": archive,
-            "package": parts[3], "series": parts[4]}
+            "package": state.get("package", ""), "series": state.get("series", "")}
 
 
 def resolve_target(args):
-    """(owner, archive, package, series) from CLI args, else from .ppa-request."""
+    """(owner, archive, package, series) from CLI args, else review state file."""
     if len(args) >= 2:
         owner, archive = normalize(args[0])
         return owner, archive, args[1], (args[2] if len(args) > 2 else "")
     req = read_request()
     if not req or not req["package"]:
-        sys.exit("no package given and no pick recorded in .ppa-request\n"
+        sys.exit("no package given and no review target in .review-status.json\n"
                  "pick one on the PPA page, or pass: <ppa-ref> <pkg> [series]")
     return req["owner"], req["archive"], req["package"], req["series"]
 
@@ -223,7 +230,7 @@ if __name__ == "__main__":
     if cmd == "current":
         req = read_request()
         if not req:
-            sys.exit("no .ppa-request recorded yet")
+            sys.exit("no review target recorded yet (.review-status.json)")
         print(f"ppa:{req['owner']}/{req['archive']}\t{req['package']}"
               f"\t{req['series']}")
         sys.exit(0)

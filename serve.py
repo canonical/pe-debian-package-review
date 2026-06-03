@@ -10,7 +10,9 @@ Routes:
   POST /debpr/ppa          normalize the PPA, then list its packages so the
                            user can pick one (warns if there are many)
   GET  /debpr/ppa?owner=&archive=&pick=NAME&series=S
-                           record the chosen package to .ppa-request
+                           start a review of the chosen package: init the status
+                           file (the single source of truth for the target) and
+                           launch the mechanical pipeline
   GET  /debpr/ppa/status   the review-status panel as an HTML fragment (polled)
 """
 import atexit
@@ -20,7 +22,6 @@ import subprocess
 import sys
 import threading
 import urllib.parse
-from datetime import datetime, timezone
 from pathlib import Path
 
 import markdown
@@ -35,9 +36,7 @@ DOC = (DIR / (sys.argv[1] if len(sys.argv) > 1 else "Package-Review-Guide_README
 URL_PATH = "/debpr/" + DOC.name
 PPA_PATH = "/debpr/ppa"
 STATUS_PATH = "/debpr/ppa/status"
-REQUEST_FILE = DIR / ".ppa-request"
 PIDFILE = DIR / ".serve.pid"
-RUNNER = DIR / "review-run.sh"
 RUN_LOG = "/tmp/debpr-review-run.log"
 MANY = 5  # warn when a PPA has more than this many packages
 
@@ -149,25 +148,18 @@ def package_list_page(owner, archive, rows):
       {status_panel()}""")
 
 
-def record(owner, archive, package="", series=""):
-    stamp = datetime.now(timezone.utc).isoformat(timespec="seconds")
-    REQUEST_FILE.write_text(
-        f"{stamp}\tppa:{owner}/{archive}\t{ppalib.ppa_web_url(owner, archive)}"
-        f"\t{package}\t{series}\n", encoding="utf-8")
-
-
 _run_lock = threading.Lock()
-_run_proc = None  # the in-flight review-run.sh, if any
+_run_proc = None  # the in-flight review pipeline, if any
 
 
 def start_review_run(setup=None):
-    """Run `setup` and launch review-run.sh detached, unless one is running.
+    """Run `setup` and launch the mechanical pipeline detached, unless one runs.
 
-    `setup` (record the pick + init the status) runs *inside* the lock and only
-    when we actually start, so a fresh pick can't reset the state of a review
-    that's already in flight. Returns True if started, False if one was running.
-    The child gets its own session (start_new_session) so it survives the
-    request thread, with stdin closed and output captured to RUN_LOG.
+    `setup` (init the status file for the new pick) runs *inside* the lock and
+    only when we actually start, so a fresh pick can't reset the state of a
+    review that's already in flight. Returns True if started, False if one was
+    running. The child gets its own session (start_new_session) so it survives
+    the request thread, with stdin closed and output captured to RUN_LOG.
     """
     global _run_proc
     with _run_lock:
@@ -177,7 +169,7 @@ def start_review_run(setup=None):
             setup()
         log = open(RUN_LOG, "w", encoding="utf-8")
         _run_proc = subprocess.Popen(
-            ["bash", str(RUNNER)], cwd=str(DIR),
+            ["python3", str(DIR / "review_status.py"), "run-all"], cwd=str(DIR),
             stdout=log, stderr=subprocess.STDOUT,
             stdin=subprocess.DEVNULL, start_new_session=True)
         return True
@@ -212,9 +204,8 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 pkg = q.get("pick", [""])[0]
                 series = q.get("series", [""])[0]
                 def setup():
-                    record(owner, archive, pkg, series)
-                    review_status.init(f"ppa:{owner}/{archive}", pkg)
-                    review_status.set_step("List packages", "done")
+                    review_status.init(owner, archive, pkg, series)
+                    review_status.set_step("list", "done")
 
                 if start_review_run(setup):
                     msg = (f"<p class='ok'>Recorded <code>{pkg}</code> "
@@ -250,7 +241,6 @@ class Handler(http.server.BaseHTTPRequestHandler):
             self._send(ppa_form(f"<p class='err'>Could not query PPA: "
                                 f"{exc}</p>"), code=502)
             return
-        record(owner, archive)  # remember the PPA even before a pick
         if not rows:
             self._send(ppa_form(f"<p class='warn'>No published sources found in "
                                 f"<code>ppa:{owner}/{archive}</code>.</p>"))

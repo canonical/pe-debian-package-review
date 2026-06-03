@@ -3,8 +3,8 @@
  *
  * Replaces the old polling pattern (the agent re-reading .review-status.json
  * inside a turn). Instead this plugin watches the state file with an OS-level
- * fs.watch (zero LLM tokens) and, the moment review-run.sh finishes the
- * mechanical steps and writes its "Mechanical checks complete" note, injects a
+ * fs.watch (zero LLM tokens) and, the moment `review_status.py run-all` finishes
+ * the mechanical steps and writes its "Mechanical checks complete" note, injects a
  * new turn into the active session via the server's promptAsync API. opencode
  * then starts a turn on its own and the agent continues the judgment steps.
  *
@@ -26,7 +26,7 @@ const STATE_FILE = join(HERE, "..", "..", ".review-status.json")
 const STATE_DIR = dirname(STATE_FILE)
 const STATE_NAME = basename(STATE_FILE)
 
-// The note review-run.sh writes when the scriptable steps are done.
+// The note review_status.py run-all writes when the scriptable steps are done.
 const COMPLETE_PREFIX = "Mechanical checks complete"
 
 // Pull a sessionID out of whatever bus event shape we get. Different events
@@ -65,7 +65,15 @@ export default (async ({ client }) => {
       return // file mid-write or absent; the next watch event will retry
     }
     const note: string = state?.note ?? ""
-    if (!note.startsWith(COMPLETE_PREFIX)) return
+    if (!note.startsWith(COMPLETE_PREFIX)) {
+      // A new run has begun (init() writes note="Review started.") or the agent
+      // is mid-review. Clearing the dedup here means the *next* completion fires
+      // again -- even for the same package whose completion note is identical to
+      // a previous run's. Without this, re-reviewing the same package is
+      // silently suppressed because signature === lastNotified.
+      lastNotified = undefined
+      return
+    }
 
     const pkg: string = state?.package ?? "package"
     const signature = `${pkg}::${note}`

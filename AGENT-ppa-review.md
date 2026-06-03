@@ -13,9 +13,10 @@ A PPA can be given in two equivalent forms:
 Two ways to receive one:
 
 1. **Web form** — the user visits `http://<addr>:8000/debpr/ppa`, submits the
-   PPA, and `serve.py` records it (normalized) to `.ppa-request` as a
-   tab-separated line: `<timestamp>\tppa:owner/archive\t<url>`. The agent reads
-   the latest line from `.ppa-request`.
+   PPA, and picks a package. `serve.py` then calls `review_status.init` to
+   create the review state file `.review-status.json` — the **single source of
+   truth** for the target (owner/archive/package/series). The agent (and
+   `ppa.py`) read the target from there.
 2. **In chat** — the user pastes either form directly.
 
 Normalize either form with `ppa.py`:
@@ -40,13 +41,14 @@ If there are several packages, confirm with the user which one(s) to review
 ## Scriptable steps in one shot (optional)
 
 Picking a package on the web page now **auto-starts** the mechanical steps: the
-server launches `review-run.sh` in the background (detached, guarded so only one
-review runs at a time) and the status panel begins updating on its own. You can
-also run it by hand — to re-run, or when driving a review without the web UI:
+server launches `review_status.py run-all` in the background (detached, guarded
+so only one review runs at a time) and the status panel begins updating on its
+own. You can also run it by hand — to re-run, or when driving a review without
+the web UI:
 
 ```sh
-./review-run.sh                          # uses the pick in .ppa-request
-./review-run.sh OWNER/ARCHIVE PKG SERIES # or specify explicitly
+python3 review_status.py run-all                          # uses .review-status.json
+python3 review_status.py run-all OWNER/ARCHIVE PKG SERIES # or specify explicitly
 ```
 
 It runs: Fetch source -> Lintian (source package) -> Binary builds (PPA) ->
@@ -57,15 +59,33 @@ debian/watch, changelog, control, copyright, patches, Symbols & ABI, Report)
 are still done by the agent. The individual steps can also be run on their own,
 as described next.
 
+### Driving the status panel
+
+The panel reads `.review-status.json`. Update one step at a time as you reach a
+verdict; `<id>` is a canonical step id (`python3 review_status.py steps` lists
+them) and matching tolerates a unique substring:
+
+```sh
+python3 review_status.py step <id> <status> [note...]   # one step
+python3 review_status.py run  <id> <cmd...>             # stream a cmd as a step
+python3 review_status.py remaining                      # steps not yet reviewed
+python3 review_status.py severity                        # findings: must-fix/should-fix
+```
+
+`<status>` is `pending|active|done|warn|fail|skip`. `warn` = should-fix,
+`fail` = must-fix (these feed the `severity` buckets and the report). An
+unknown/ambiguous `<id>` is **rejected** (never silently appended), so a typo
+can't create a phantom step.
+
 ## Step 2 — Fetch the source
 
 For each chosen package, pull the source for its series (no signing, no upload).
-Use the helper, which reads the latest pick from `.ppa-request`, cleans the
+Use `ppa.py fetch`, which reads the target from `.review-status.json`, cleans the
 scratch dir, and runs the correct command:
 
 ```sh
-./fetch-source.sh                       # uses the picked package in .ppa-request
-./fetch-source.sh OWNER/ARCHIVE PKG SERIES   # or specify explicitly
+python3 ppa.py fetch                       # uses the target in .review-status.json
+python3 ppa.py fetch OWNER/ARCHIVE PKG SERIES   # or specify explicitly
 ```
 
 Under the hood that is:
@@ -122,16 +142,15 @@ run without a full binary build:
 Check the PPA's own binary builds and lint the resulting `.deb`s:
 
 ```sh
-./check-binaries.sh                 # uses the pick in .ppa-request
-./check-binaries.sh OWNER/ARCHIVE PKG SERIES
+python3 ppa.py binaries                 # uses the target in .review-status.json
+python3 ppa.py binaries OWNER/ARCHIVE PKG SERIES
 ```
 
 - **Binary builds (PPA)**: `python3 ppa.py builds ppa:OWNER/ARCHIVE PKG SERIES`
   prints the per-architecture state from Launchpad. If any arch is not
   "Successfully built", report it and **reference the build-log URL** that the
-  command prints (the helper exits non-zero so the step is flagged). The helper
-  also downloads the published binaries (`pull-ppa-source -p debs`) into
-  `/tmp/opencode/ppa-review`.
+  command prints. `ppa.py binaries` also downloads the published binaries
+  (`pull-ppa-source -p debs`) into `/tmp/opencode/ppa-review`.
 - **Lintian (binary packages)**: run explicitly on every downloaded `.deb`:
   ```sh
   cd /tmp/opencode/ppa-review && lintian -EvIL +pedantic *.deb

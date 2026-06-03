@@ -1,6 +1,5 @@
 __pycache__/
 .serve.pid
 .serve.file
-.ppa-request
 .review-status.json
 .review-log
