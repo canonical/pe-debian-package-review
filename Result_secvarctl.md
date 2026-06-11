@@ -5,7 +5,7 @@
 - **Target:** plucky (Ubuntu)
 - **PPA:** https://launchpad.net/~fheimes/+archive/ubuntu/test
 - **Source:** `/tmp/opencode/ppa-review/secvarctl-1.1.0`
-- **Reviewed against:** `Package-Review-Guide_README.md`
+- **Reviewed against:** `Package-Review-Guidelines.md`
 
 ## Verdict
 

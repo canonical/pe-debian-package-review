@@ -12,7 +12,7 @@ DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PIDFILE="$DIR/.serve.pid"
 FILEPTR="$DIR/.serve.file"
 LOG="/tmp/debpr-serve.log"
-DEFAULT="Package-Review-Guide_README.md"
+DEFAULT="Package-Review-Guidelines.md"
 
 current_file() { [ -f "$FILEPTR" ] && cat "$FILEPTR" || echo "$DEFAULT"; }
 

@@ -2,14 +2,16 @@
 """Render and serve a Markdown file as HTML, plus a PPA-review request form.
 
 Usage: python3 serve.py [file.md]
-  Defaults to Package-Review-Guide_README.md.
+  Defaults to Package-Review-Guidelines.md.
 
 Routes:
   GET  /debpr/<basename>   render the served Markdown file
-  GET  /debpr/ppa          a form to submit a Launchpad PPA for review
-  POST /debpr/ppa          normalize the PPA, then list its packages so the
+  GET  /debpr/Package-Review-Frontend
+                           a form to submit a Launchpad PPA for review
+  POST /debpr/Package-Review-Frontend
+                           normalize the PPA, then list its packages so the
                            user can pick one (warns if there are many)
-  GET  /debpr/ppa?owner=&archive=&pick=NAME&series=S
+  GET  /debpr/Package-Review-Frontend?owner=&archive=&pick=NAME&series=S
                            start a review of the chosen package: init the status
                            file (the single source of truth for the target) and
                            launch the mechanical pipeline
@@ -32,9 +34,9 @@ import review_status
 PORT = 8000
 ADDRS = ["10.72.172.152", "127.0.0.1"]
 DIR = Path(__file__).resolve().parent
-DOC = (DIR / (sys.argv[1] if len(sys.argv) > 1 else "Package-Review-Guide_README.md")).resolve()
+DOC = (DIR / (sys.argv[1] if len(sys.argv) > 1 else "Package-Review-Guidelines.md")).resolve()
 URL_PATH = "/debpr/" + DOC.name
-PPA_PATH = "/debpr/ppa"
+PPA_PATH = "/debpr/Package-Review-Frontend"
 STATUS_PATH = "/debpr/ppa/status"
 PIDFILE = DIR / ".serve.pid"
 RUN_LOG = "/tmp/debpr-review-run.log"

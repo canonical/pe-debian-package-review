@@ -17,10 +17,10 @@ with the matching argument:
 
 Notes:
 - `<file.md>` is a placeholder for any Markdown file in this directory (e.g.
-  `/serve Package-Review-Guide_README.md`). The chosen file is remembered in
+  `/serve Package-Review-Guidelines.md`). The chosen file is remembered in
   `.serve.file`, so a later `/serve restart` keeps serving it.
 - The default file (when none was ever chosen) is
-  `Package-Review-Guide_README.md`.
+  `Package-Review-Guidelines.md`.
 - `serve-ctl.sh` tracks the process in `.serve.pid`, logs to
   `/tmp/debpr-serve.log`, and uses `serve.py` under the hood. After starting,
   report the URL `http://10.72.172.152:8000/debpr/<basename>` (and the

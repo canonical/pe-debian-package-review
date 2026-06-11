@@ -1,7 +1,7 @@
 # AGENT-ppa-review.md — Reviewing a Launchpad PPA
 
 How an agent takes a PPA reference and reviews its package(s) per
-`Package-Review-Guide_README.md`.
+`Package-Review-Guidelines.md`.
 
 ## Input: how a PPA gets specified
 
@@ -12,7 +12,7 @@ A PPA can be given in two equivalent forms:
 
 Two ways to receive one:
 
-1. **Web form** — the user visits `http://<addr>:8000/debpr/ppa`, submits the
+1. **Web form** — the user visits `http://<addr>:8000/debpr/Package-Review-Frontend`, submits the
    PPA, and picks a package. `serve.py` then calls `review_status.init` to
    create the review state file `.review-status.json` — the **single source of
    truth** for the target (owner/archive/package/series). The agent (and
@@ -115,7 +115,7 @@ dpkg-source -x <package>_<version>.dsc      # extract into a tree
 
 ## Step 3 — Review against the guide
 
-Apply `Package-Review-Guide_README.md`. The high-value, tool-backed checks that
+Apply `Package-Review-Guidelines.md`. The high-value, tool-backed checks that
 run without a full binary build:
 
 - **Classify** the upload (needs-packaging / PATCH / SRU) and confirm the target
