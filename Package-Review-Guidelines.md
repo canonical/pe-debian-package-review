@@ -82,9 +82,15 @@ explicit, recorded justification for any exception.
   `(LP: #1234567)` to tie the upload to its tracking bug.
 - **Entries must be in active, imperative form**, e.g. "Remove
   d/p/oldpatch.patch…", "Update Standards-Version…", "No-change rebuild."
-- **Every change under `debian/*` should be reflected** in the changelog, and
-  ideally each line maps to a git commit to ease later maintenance. Folder
-  abbreviations are fine (`d/control`, `d/rules`, `d/p/name.patch`).
+- **Every file the packager changed under `debian/` must have a matching
+  changelog entry.** Each modified `debian/<file>` needs its own bullet naming
+  that file — e.g. a bullet mentioning `d/control` when `debian/control` was
+  changed, `d/copyright` when `debian/copyright` was changed,
+  `d/p/<name>.patch` when a patch was added/edited, and so on. Cross-check the
+  packaging diff against the changelog: any changed `debian/` file with no
+  corresponding entry is a review finding. (`debian/<file>` may be abbreviated
+  to `d/<file>`.) Ideally each line maps to a git commit to ease later
+  maintenance.
 - **Omit redundant `d/changelog` lines** — a changelog describing itself is
   implied and just noise.
 - **Consider a NEWS.Debian entry** for changes important enough that users
