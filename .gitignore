@@ -3,3 +3,5 @@ __pycache__/
 .serve.file
 .review-status.json
 .review-log
+Result_*.md
+session*.md
