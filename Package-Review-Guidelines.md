@@ -21,14 +21,30 @@ explicit, recorded justification for any exception.
   - **PATCH** — an update for the Ubuntu release currently in development.
   - **SRU** — a Stable Release Update for an already-published release.
 - **Check for existing/older versions** with `rmadison <package>` so you know
-  what you are superseding and on which releases it already exists.
+  what you are superseding and on which releases it already exists. An
+  **empty result confirms needs-packaging** — the package doesn't exist
+  anywhere in the archive yet.
 - **Confirm the archive pocket is correct** (`main`, `universe`, `multiverse`,
   or `restricted`) — it determines support commitments and licensing rules.
 - **Confirm the target release is correct** (`plucky`, `oracular`, `noble`,
   `jammy`, …) and matches the changelog.
+- **Check `debian/source/format`** early — `3.0 (native)` means Debian/Ubuntu
+  packaging *is* upstream (no separate orig tarball). This changes what's
+  expected downstream: §2 (watch) and §6 (patches) become **not
+  applicable** rather than defects — don't flag a missing `debian/watch` or
+  `debian/patches/` as must-fix on a native package.
+- **A single "Initial release" changelog entry is normal for
+  needs-packaging**, even if the version already carries a high `ubuntuN`
+  suffix (e.g. `1.0ubuntu9`) — those prior numbers are typically just PPA/dev
+  test-build iterations that never reached the archive, not missing history
+  to chase down. Don't flag this as incomplete changelog history on its own;
+  do still require the `LP: #` bug reference (§11).
 
 ## 2. debian/watch (upstream tracking)
 
+- **Not applicable for native packages** (`debian/source/format` is
+  `3.0 (native)`) — there is no separate upstream to track, so a missing
+  `debian/watch` is expected, not a finding.
 - **A correct watch file must be present** — it lets tooling discover and verify
   new upstream releases; a reviewer should always insist on one.
 - **Use the latest watch file format** — `version=5` as of today. New packages
@@ -107,6 +123,15 @@ explicit, recorded justification for any exception.
   policy changes) when targeting the Ubuntu devel series or Debian
   unstable/experimental. **New packages especially must use the latest available
   Standards-Version** rather than an older one.
+- **A `newer-standards-version` lintian warning can be a stale-database false
+  positive** — verify the Standards-Version cited really is current before
+  treating it as a finding; lintian's own tag database lags Policy releases.
+- **Watch for empty metapackages** (`Depends: ${misc:Depends}` only, no real
+  files) whose `Description:` promises functionality they don't yet deliver
+  (e.g. a shared "-common" package meant to be depended on by several
+  metapackages, but not yet populated). Lintian flags these as
+  `empty-binary-package` — treat it as a should-fix unless the packager
+  explicitly documents it as an intentional, temporary placeholder.
 - **Fields must be sane** — accurate Sections, meaningful Descriptions, correct
   dependencies, and upstream metadata (`debian/upstream/metadata`).
 - **Decide whether `update-maintainer` is needed** so Ubuntu uploads carry
@@ -122,12 +147,21 @@ explicit, recorded justification for any exception.
   differ.
 - **All copyright holders of `debian/*` files must be listed** — extract Debian
   contributors from `debian/changelog` and acknowledge each one.
+- **Cross-check `Source:`/`Upstream-Name:` against `debian/control`'s
+  `Vcs-Browser`/`Vcs-Git`.** A mismatch is a common copy-paste error when a
+  new package is modeled after a sibling (check `debian/README` for phrasing
+  like "follows the architecture of …") — the copyright file may still point
+  at the sibling's repository. This is a must-fix for needs-packaging.
 - **Remove stale `Files:` patterns** that point at paths no longer present in
   the new upstream (watch for dropped vendored trees like `rust-vendor/*`).
 - **Apply the strictest scrutiny for needs-packaging**, where copyright is a
   primary gate for entering the archive.
 
 ## 6. Patches (quilt) and DEP-3
+
+- **Not applicable for native packages** (`3.0 (native)`) — there is no
+  separate upstream tree to patch and no `debian/patches/` directory is
+  expected; don't flag its absence as a finding.
 
 For the full authoring walkthrough see
 <https://documentation.ubuntu.com/project/contributors/patching/make-changes-to-a-package/>.
@@ -169,6 +203,10 @@ For the full authoring walkthrough see
 
 ## 7. Symbols & ABI
 
+- **Not applicable when no shared libraries are shipped** — check
+  `debian/control` for `Section: libs` stanzas and the binary lintian run for
+  any `.so` files first; metapackages, config-file packages, and
+  maintainer-script-only packages have no ABI surface to track.
 - **C/C++ libraries must ship an up-to-date symbols file** so dependency
   versioning is precise (check the build log for `MINVER` hints).
 - **Use the `(c++)` symbol format** for C++ libraries.
@@ -184,12 +222,23 @@ For the full authoring walkthrough see
 
 - **Build with `sbuild`** for full binary builds and **`dpkg-buildpackage -S`**
   for source-only builds, in a clean chroot.
+- **A successful PPA test build for every target architecture is required,
+  not optional.** Check Launchpad's build status per arch; any architecture
+  not showing "Successfully built" is a **must-fix** blocker — cite the
+  build-log URL in the report.
 - **Run autopkgtests** (`sbuild --run-autopkgtest`) — they are **required** for
-  new packages.
+  new packages, and any existing autopkgtest suite must **pass** for
+  PATCH/SRU uploads too. If a package genuinely has none (e.g. a pure
+  metapackage with nothing testable), say so explicitly in the report rather
+  than leaving the check unaddressed.
 - **Build hardening flags must be enabled.**
 - **Do a PPA test build** and reference it in the LP bug; the build counts as
   successful only if its in-build tests also pass.
-- **Consider real-world tests** such as install/upgrade of the resulting binary.
+- **An install/upgrade test of the resulting binary is required, not just
+  "considered"**: install the built `.deb`(s) in a disposable environment and
+  confirm maintainer scripts run cleanly; if an older version is already
+  published, also test upgrading from it. A failure here (crash, unhandled
+  maintainer-script error) is a **must-fix**.
 - **Keep `debian/rules` clean** — no excessive workarounds; use `dh-python` for
   Python packages.
 
@@ -202,6 +251,18 @@ For the full authoring walkthrough see
   documented justification; fix as much as possible.
 - **Use `lintian-explain-tags <tag>`** to understand any tag before acting.
 - **Use a documented `lintian-overrides`** only for genuine false positives.
+- **Known recurring false positives worth recognizing on sight:**
+  - `newer-standards-version X (current is Y)` when `X` actually *is* the
+    latest Policy release — the lintian tag database itself is stale, not
+    the package.
+  - `unknown-field Modaliases` on packages using `dh-modaliases`
+    (`Build-Depends: dh-modaliases`, `dh $@ --with modaliases`,
+    `debian/<pkg>.modaliases`) — this is the legitimate `Modaliases:`
+    substvar mechanism used by hardware-driver metapackages (e.g. Ubuntu HWE
+    metapackages); lintian just doesn't recognize the field name.
+  - `groff-message … troff: Segmentation fault` when lintian renders shipped
+    man pages inside some minimal review containers — an environment
+    artifact, not a package defect.
 
 ## 10. Sponsoring & upload
 

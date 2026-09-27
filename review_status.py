@@ -69,6 +69,8 @@ STEPS = [
     ("lintian-source", "Lintian (source package)"),
     ("builds",         "Binary builds (PPA)"),
     ("lintian-binary", "Lintian (binary packages)"),
+    ("install-test",   "Install/upgrade test"),
+    ("autopkgtest",    "Tests (upstream/autopkgtest)"),
     ("report",         "Report"),
 ]
 STEP_IDS = [i for i, _ in STEPS]

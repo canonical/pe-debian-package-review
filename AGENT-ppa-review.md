@@ -55,9 +55,12 @@ It runs: Fetch source -> Lintian (source package) -> Binary builds (PPA) ->
 Lintian (binary packages), stopping if the fetch fails. lintian uses
 `--fail-on none`, so a finding (E:/W:) doesn't fail the step — every tag lands in
 the panel log for you to triage. The **judgment** steps below (Classify,
-debian/watch, changelog, control, copyright, patches, Symbols & ABI, Report)
-are still done by the agent. The individual steps can also be run on their own,
-as described next.
+debian/watch, changelog, control, copyright, patches, Symbols & ABI,
+**Install/upgrade test, Tests (autopkgtest)**, Report) are still done by the
+agent — the install/upgrade test and autopkgtest run are *not* part of the
+automated `run-all` pipeline (they need a disposable environment to install
+into) and must be driven by hand each time; see Step 3c. The individual steps
+can also be run on their own, as described next.
 
 ### Driving the status panel
 
@@ -147,10 +150,13 @@ python3 ppa.py binaries OWNER/ARCHIVE PKG SERIES
 ```
 
 - **Binary builds (PPA)**: `python3 ppa.py builds ppa:OWNER/ARCHIVE PKG SERIES`
-  prints the per-architecture state from Launchpad. If any arch is not
-  "Successfully built", report it and **reference the build-log URL** that the
-  command prints. `ppa.py binaries` also downloads the published binaries
-  (`pull-ppa-source -p debs`) into `/tmp/opencode/ppa-review`.
+  prints the per-architecture state from Launchpad. **Every architecture the
+  package targets must show "Successfully built"** — this is a required
+  pass/fail check, not optional. If any arch is not "Successfully built",
+  that is a **must-fix** (blocker): report it and **reference the build-log
+  URL** that the command prints. `ppa.py binaries` also downloads the
+  published binaries (`pull-ppa-source -p debs`) into
+  `/tmp/opencode/ppa-review`.
 - **Lintian (binary packages)**: run explicitly on every downloaded `.deb`:
   ```sh
   cd /tmp/opencode/ppa-review && lintian -EvIL +pedantic *.deb
@@ -160,6 +166,40 @@ python3 ppa.py binaries OWNER/ARCHIVE PKG SERIES
   (e.g. a broken groff/troff producing `groff-message … Segmentation fault`).
 - Optional **source build**: `dpkg-buildpackage -S -us -uc` (no `sbuild` here, so
   no local binary build — rely on the PPA's builds above).
+
+## Step 3c — Install/upgrade test and package tests (required, not optional)
+
+These two checks are **required for every review**, not "nice to have" —
+mark them `done`/`fail` on the panel (`install-test`, `autopkgtest`) like any
+other judgment step; don't silently skip them.
+
+- **Install/upgrade test**: actually install the downloaded `.deb`(s) in a
+  disposable environment (container/chroot/VM — never the review host
+  directly) and confirm `postinst`/`preinst`/`prerm`/`postrm` all run
+  cleanly:
+  ```sh
+  sudo apt-get install -y ./*.deb        # fresh install
+  ```
+  If an older version of the package is already published in the archive
+  (check with `rmadison`), also test the **upgrade path** from that version
+  to the one under review — install the old version first, then upgrade to
+  the new `.deb`(s), and confirm the transition is clean (no leftover
+  files/config from removed pieces, maintainer scripts idempotent). Record
+  the exact commands and their outcome in the report. A failure here (crash,
+  unhandled maintainer-script error, broken dependency) is a **must-fix**.
+- **Tests (upstream test suite / autopkgtest)**: check for
+  `debian/tests/control` and run it:
+  ```sh
+  sbuild --run-autopkgtest ...           # full build + autopkgtest
+  # or, against already-built binaries:
+  autopkgtest <package>_<version>.dsc -- <backend>
+  ```
+  All defined tests must **pass**. If the package has **no autopkgtest at
+  all**, that absence is itself a finding to report — **must-fix for new
+  packages** (§11/§8 require autopkgtests for needs-packaging), should-fix
+  otherwise unless justified (e.g. genuinely nothing testable, such as a pure
+  metapackage — say so explicitly in the report rather than leaving it
+  unaddressed).
 
 ## Step 4 — Report
 
