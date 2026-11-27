@@ -10,7 +10,10 @@ The same JSON state file is the single source of truth for *which package is
 under review* (owner/archive/package/series) -- there is no separate request
 file. `ppa.py` reads the target from here.
 
-State file: .review-status.json   Log file: .review-log   (both gitignored)
+State file: <repo-root>/var/.review-status.json
+Log file:   <repo-root>/var/.review-log
+(both gitignored; this script's own directory can live anywhere -- e.g.
+inside an OpenCode skill -- the repo root is found by walking up from here)
 
 CLI:
   init <OWNER/ARCHIVE> <pkg> [series]   start/reset a review (records the target)
@@ -48,11 +51,22 @@ from pathlib import Path
 
 import ppa  # for normalize() and resolve_target(); ppa does NOT import this
 
+# This file lives at <repo-root>/.opencode/skills/ppa-review/scripts/ -- walk
+# up to the repo root so the tool works regardless of where it's invoked from,
+# and so the whole ppa-review/ skill folder stays relocatable as a unit.
 DIR = Path(__file__).resolve().parent
-STATE_FILE = DIR / ".review-status.json"
-LOG_FILE = DIR / ".review-log"
+REPO_ROOT = DIR.parents[3]
+VAR = REPO_ROOT / "var"
+STATE_FILE = VAR / ".review-status.json"
+LOG_FILE = VAR / ".review-log"
+REPORTS_DIR = VAR / "reports"
 LOG_TAIL = 14  # number of recent activity lines to show in the panel
 WORK = "/tmp/opencode/ppa-review"
+
+# var/ (and var/reports/) ship as empty, tracked directories (.gitkeep) so this
+# mkdir is normally a no-op; it's a safety net for anyone who deleted them.
+VAR.mkdir(parents=True, exist_ok=True)
+REPORTS_DIR.mkdir(parents=True, exist_ok=True)
 
 # The default pipeline, mirroring AGENT-ppa-review.md: (canonical id, display).
 # The id is stable and typo-resistant; the display name is what the panel shows.

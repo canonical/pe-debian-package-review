@@ -1,32 +1,44 @@
-# AGENT-serving.md — How to serve a Markdown file as a web page
+---
+name: Serve a Markdown file as a web page
+description: Render a .md file to HTML and serve it over plain-Python HTTP (no framework), reachable from a browser. Use this whenever asked to "serve", "preview", or "publish" a Markdown document locally, or when handling a "/serve ..." command.
+---
+
+# Serve a Markdown file as a web page
 
 Reusable knowledge for an agent: render a `.md` file to HTML and serve it over
-HTTP with plain Python (no framework), reachable from a browser.
+HTTP with plain Python (no framework), reachable from a browser. This skill is
+pure, generic knowledge with no bundled scripts of its own — the recipe below
+is a complete, working pattern you can implement directly. For a concrete,
+already-working implementation of this same pattern (plus a PPA-review web
+form and live status panel built on top of it), see the `ppa-review` skill's
+`scripts/serve.py` and `scripts/serve-ctl.sh`.
 
 ## `/serve` commands
 
-When the user types a `/serve …` command, run `serve-ctl.sh` in this directory
-with the matching argument:
+When the user types a `/serve …` command and the `ppa-review` skill's
+`serve-ctl.sh` is available (e.g. both skills are installed together, as in
+the `debpr` repo), run it with the matching argument:
 
-| User command         | Action                                              | Run                            |
-| -------------------- | --------------------------------------------------- | ------------------------------ |
-| `/serve start`       | Start the server with the last-used (or default) file | `./serve-ctl.sh start`       |
-| `/serve stop`        | Stop the server                                     | `./serve-ctl.sh stop`          |
-| `/serve restart`     | Restart with the current file                       | `./serve-ctl.sh restart`       |
-| `/serve <file.md>`   | Switch to `<file.md>` and (re)start                 | `./serve-ctl.sh <file.md>`     |
+| User command         | Action                                              | Run                                  |
+| --------------------- | ---------------------------------------------------- | ------------------------------------ |
+| `/serve start`       | Start the server with the last-used (or default) file | `./serve-ctl.sh start`               |
+| `/serve stop`        | Stop the server                                     | `./serve-ctl.sh stop`                |
+| `/serve restart`     | Restart with the current file                       | `./serve-ctl.sh restart`             |
+| `/serve <file.md>`   | Switch to `<file.md>` and (re)start                 | `./serve-ctl.sh <path/to/file.md>`   |
 
-Notes:
-- `<file.md>` is a placeholder for any Markdown file in this directory (e.g.
-  `/serve Package-Review-Guidelines.md`). The chosen file is remembered in
-  `.serve.file`, so a later `/serve restart` keeps serving it.
+Notes (when using that concrete implementation):
+- `<file.md>` is a path relative to the repo root (e.g.
+  `docs/Package-Review-Guidelines.md` or `var/reports/Result_<pkg>.md`). The
+  chosen file is remembered in `var/.serve.file`, so a later `/serve restart`
+  keeps serving it.
 - The default file (when none was ever chosen) is
-  `Package-Review-Guidelines.md`.
-- `serve-ctl.sh` tracks the process in `.serve.pid`, logs to
+  `docs/Package-Review-Guidelines.md`.
+- `serve-ctl.sh` tracks the process in `var/.serve.pid`, logs to
   `/tmp/debpr-serve.log`, and uses `serve.py` under the hood. After starting,
-  report the URL `http://10.72.172.152:8000/debpr/<basename>` (and the
-  `127.0.0.1` equivalent).
-- `serve.py` now takes the file as its first argument and serves it at
-  `/debpr/<basename>`; `serve-ctl.sh` passes the remembered file automatically.
+  report the URL `http://<addr>:8000/debpr/<basename>`.
+
+If there's no such existing script available, implement the recipe below
+from scratch instead.
 
 ## Goal
 
@@ -49,8 +61,6 @@ If `pip` is missing, install it first (e.g. `python3 -m ensurepip` or the
 distro's `python3-pip` package).
 
 ## Minimal recipe
-
-The pattern (see `serve.py` in this directory for a working copy):
 
 1. Read the `.md` file and convert with
    `markdown.markdown(text, extensions=["fenced_code", "tables", "toc", "sane_lists"])`.
@@ -108,3 +118,11 @@ kill <PID>                       # stop it
   the next browser refresh — no restart needed.
 - Keep the path match exact; redirect `/` to the document only if you want a
   convenience entry point.
+- **If serving more than one directory of `.md` files** (e.g. a docs folder
+  and a reports folder), validate the requested basename against a safe
+  pattern (e.g. `^[A-Za-z0-9][A-Za-z0-9._-]*\.md$`, rejecting any `/`) *before*
+  touching the filesystem, then look it up in each allowed directory by plain
+  join (no `..`-traversal possible since no separator is accepted). Avoid
+  resolving symlinks for this containment check — resolving a symlinked file
+  returns its target's real parent directory, not the symlink's own directory,
+  which can defeat a naive `resolved_path.parent == allowed_dir` check.

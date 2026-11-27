@@ -1,11 +1,15 @@
 #!/usr/bin/env python3
 """Render and serve a Markdown file as HTML, plus a PPA-review request form.
 
-Usage: python3 serve.py [file.md]
-  Defaults to Package-Review-Guidelines.md.
+Usage: python3 serve.py [file-to-serve]
+  Defaults to docs/Package-Review-Guidelines.md (relative to the repo root).
+  A path argument may be absolute, or relative to the current directory.
 
 Routes:
   GET  /debpr/<basename>   render the served Markdown file
+  GET  /debpr/<name>.md    render any other .md file found by that exact
+                           basename under docs/ or var/reports/ (lets you
+                           browse a report without restarting the server)
   GET  /debpr/Package-Review-Frontend
                            a form to submit a Launchpad PPA for review
   POST /debpr/Package-Review-Frontend
@@ -20,6 +24,7 @@ Routes:
 import atexit
 import http.server
 import os
+import re
 import subprocess
 import sys
 import threading
@@ -33,12 +38,31 @@ import review_status
 
 PORT = 8000
 ADDRS = ["10.72.172.152", "127.0.0.1"]
+
+# This file lives at <repo-root>/.opencode/skills/ppa-review/scripts/ -- walk
+# up to the repo root so the server works regardless of where it's invoked
+# from, and so the whole ppa-review/ skill folder stays relocatable as a
+# self-contained unit (copy it elsewhere and it still finds its own files).
 DIR = Path(__file__).resolve().parent
-DOC = (DIR / (sys.argv[1] if len(sys.argv) > 1 else "Package-Review-Guidelines.md")).resolve()
+REPO_ROOT = DIR.parents[3]
+DOCS_DIR = REPO_ROOT / "docs"
+VAR_DIR = REPO_ROOT / "var"
+REPORTS_DIR = VAR_DIR / "reports"
+# Directories the generic "/debpr/<name>.md" route is allowed to serve from.
+ALLOWED_DIRS = [DOCS_DIR, REPORTS_DIR]
+# A safe, slash-free basename -- deliberately rejects any ".." or "/" so the
+# generic route can't be used to read files outside ALLOWED_DIRS. Checked
+# before any filesystem access, so it's immune to symlink-vs-realpath
+# mismatches (docs/Package-Review-Guidelines.md is itself a symlink into the
+# skill's references/ folder).
+SAFE_NAME = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]*\.md$")
+
+DOC = (Path(sys.argv[1]).resolve() if len(sys.argv) > 1
+       else (DOCS_DIR / "Package-Review-Guidelines.md").resolve())
 URL_PATH = "/debpr/" + DOC.name
 PPA_PATH = "/debpr/Package-Review-Frontend"
 STATUS_PATH = "/debpr/ppa/status"
-PIDFILE = DIR / ".serve.pid"
+PIDFILE = VAR_DIR / ".serve.pid"
 RUN_LOG = "/tmp/debpr-review-run.log"
 MANY = 5  # warn when a PPA has more than this many packages
 
@@ -191,10 +215,22 @@ class Handler(http.server.BaseHTTPRequestHandler):
         elif parts.path == STATUS_PATH:
             self._send(status_fragment())
         elif parts.path.startswith("/debpr/") and parts.path.endswith(".md"):
-            # Serve any Markdown file living in the repo dir (e.g. review-*.md).
+            # Serve any Markdown file found by exact basename under docs/ or
+            # var/reports/ (e.g. switching to a finished Result_<pkg>.md
+            # without restarting the server). SAFE_NAME rejects "/" and ".."
+            # up front, so this is safe even though docs/ may contain symlinks
+            # (a symlink's resolved realpath can live in a different directory
+            # than its nominal one, which would break a resolve()-then-
+            # parent-equality check -- so this deliberately doesn't resolve()).
             name = parts.path[len("/debpr/"):]
-            target = (DIR / name).resolve()
-            if target.parent == DIR and target.is_file():
+            target = None
+            if SAFE_NAME.match(name):
+                for d in ALLOWED_DIRS:
+                    cand = d / name
+                    if cand.is_file():
+                        target = cand
+                        break
+            if target:
                 self._send(render_markdown(target))
             else:
                 self.send_error(404)

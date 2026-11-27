@@ -1,7 +1,18 @@
+# All runtime/mutable state lives under var/ (one place for everything this
+# tool writes at run time), with just its directory structure tracked via
+# .gitkeep placeholders.
+/var/*
+!/var/.gitkeep
+!/var/reports/
+/var/reports/*
+!/var/reports/.gitkeep
+
+# Byte-compiled Python, anywhere in the tree (e.g. under any skill's scripts/).
 __pycache__/
-.serve.pid
-.serve.file
-.review-status.json
-.review-log
-Result_*.md
-session*.md
+
+# Node dev-dependencies for the plugin's type-checking (regenerate with
+# `npm install` inside .opencode/skills/ppa-review/scripts/); not needed at
+# runtime -- OpenCode supplies the actual plugin runtime.
+node_modules/
+package-lock.json
+bun.lock

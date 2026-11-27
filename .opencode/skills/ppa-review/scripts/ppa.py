@@ -13,8 +13,8 @@ CLI:
   python3 ppa.py current                            # show the under-review target
 
 For fetch/binaries/current, a missing target is read from the review state file
-.review-status.json (the package picked on the web form / via review_status.py
-init) -- there is no separate request file.
+<repo-root>/var/.review-status.json (the package picked on the web form / via
+review_status.py init) -- there is no separate request file.
 """
 import glob
 import json
@@ -26,8 +26,12 @@ import sys
 import urllib.request
 
 API = "https://api.launchpad.net/devel"
+# This file lives at <repo-root>/.opencode/skills/ppa-review/scripts/ -- walk
+# up to the repo root so the whole ppa-review/ skill folder stays relocatable
+# as a self-contained unit.
 DIR = os.path.dirname(os.path.abspath(__file__))
-STATE_FILE = os.path.join(DIR, ".review-status.json")
+REPO_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(DIR))))
+STATE_FILE = os.path.join(REPO_ROOT, "var", ".review-status.json")
 WORK = "/tmp/opencode/ppa-review"
 
 

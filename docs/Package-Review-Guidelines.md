@@ -1,0 +1,1 @@
+../.opencode/skills/ppa-review/references/Package-Review-Guidelines.md

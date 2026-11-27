@@ -8,9 +8,11 @@
  * new turn into the active session via the server's promptAsync API. opencode
  * then starts a turn on its own and the agent continues the judgment steps.
  *
- * Lives in the repo so it is versioned with the rest of the debpr tooling.
- * Loaded via an absolute entry in ~/.config/opencode/opencode.jsonc so it is
- * active no matter which directory opencode is launched from.
+ * Lives inside the ppa-review skill folder (.opencode/skills/ppa-review/
+ * scripts/) so the whole skill stays relocatable as a self-contained unit.
+ * Loaded via an entry in opencode.jsonc (project-local .opencode/opencode.jsonc
+ * is tried first; see README.md for the guaranteed-working absolute-path
+ * fallback if that doesn't auto-load in your OpenCode version).
  */
 import type { Plugin } from "@opencode-ai/plugin"
 import { watch } from "node:fs"
@@ -18,11 +20,12 @@ import { readFile } from "node:fs/promises"
 import { fileURLToPath } from "node:url"
 import { dirname, join, basename } from "node:path"
 
-// .review-status.json lives at the repo root, two levels up from
-// <repo>/.opencode/plugin/. Resolve relative to this file so the watched
-// path is correct regardless of the process cwd.
+// .review-status.json lives at <repo-root>/var/, four levels up from
+// <repo-root>/.opencode/skills/ppa-review/scripts/. Resolve relative to this
+// file so the watched path is correct regardless of the process cwd, and so
+// this still works if the ppa-review/ skill folder is copied elsewhere.
 const HERE = dirname(fileURLToPath(import.meta.url))
-const STATE_FILE = join(HERE, "..", "..", ".review-status.json")
+const STATE_FILE = join(HERE, "..", "..", "..", "..", "var", ".review-status.json")
 const STATE_DIR = dirname(STATE_FILE)
 const STATE_NAME = basename(STATE_FILE)
 
@@ -101,8 +104,9 @@ export default (async ({ client }) => {
     const text =
       `Mechanical PPA-review steps just completed for ${pkg}. ` +
       `Continue the review now: work through the remaining judgment steps ` +
-      `(classification, debian/* files, symbols & ABI) and write Result_${pkg}.md, ` +
-      `then mark the Report step done so the panel reaches N/N.`
+      `(classification, debian/* files, symbols & ABI, install/upgrade test, ` +
+      `autopkgtest) and write var/reports/Result_${pkg}.md, then mark the ` +
+      `Report step done so the panel reaches N/N.`
 
     try {
       await client.session.promptAsync({
